@@ -60,7 +60,8 @@ All three are costly, or fragile, for per-frame components.
    A kind implements `ComponentKind` or `RecipeKind`:
    - `KIND`: its name in config;
    - `from_config(&Node, &Resolver)`: typed parameters, with located
-     errors;
+     errors. Component kinds also get a `&Builder` (ticket 0006), which
+     places them in their parent's frames and builds their children;
    - the `Component` or `Recipe` methods.
 
    Built-in kinds are registered the same way.

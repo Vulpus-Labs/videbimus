@@ -61,6 +61,34 @@ didn't jump when it came back.
    (seed, frame, element), so catch-up reproduces exactly what sequential
    rendering would have.
 
+8. **The runtime's rules** (ticket 0006, `videbimus-runtime`):
+   - **Placement.** Times in config count from the start of the video, as
+     everywhere (ADR 0005 §6), so each boundary snaps from its own
+     position. A component's interval is stored in its parent's frames:
+     the builder subtracts the parent's absolute start. `from` defaults
+     to the start of the span the parent offers (a sequence offers the
+     previous child's end), the end to `to` or `from + length`, else the
+     parent's end. A child may not start before its parent.
+   - **Driving.** Each child is held as a `Child`, which owns the
+     component, its position and its checkpoints (every K local frames,
+     60 by default). Pure components are reset once and never stepped.
+     A stack does not render a layer whose opacity is 0, so it is not
+     ticked.
+   - **Containers are pure to their parents.** A sequence, stack or
+     filter renders any of its frames on request, because its children
+     catch themselves up, so it reports horizon 0. Rendering one tree's
+     frames in parallel needs one tree per thread.
+   - **Ramps.** A ramp in over L frames is 0 at the first frame and 1 at
+     frame L; a ramp out mirrors it, 0 at the last frame. Linear or
+     smoothstep. A crossfade is a stack whose second child fades in over
+     the overlap (normal blend), an even mix at the overlap's middle for
+     opaque children.
+   - **Filters** are one `filter` kind holding effect nodes (`fade`,
+     `vignette`, `grain`), applied in order, and one component.
+   - **Pixels.** Images are premultiplied linear `f32`; PNG input is
+     sRGB, decoded and premultiplied on load. A frame player shows a
+     labelled placeholder for a frame it can't find or read.
+
 ## Consequences
 
 - Fenland's backdrop becomes a component with a finite horizon (its trail

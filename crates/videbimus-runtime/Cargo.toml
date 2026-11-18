@@ -1,0 +1,21 @@
+[package]
+name = "videbimus-runtime"
+description = "videbimus's component runtime: kinds from config, random-access driving with checkpoints, and the built-in sequence, stack, crossfade, filter, frame player, image and caption kinds"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+videbimus-core = { version = "0.1.0", path = "../videbimus-core" }
+videbimus-config = { version = "0.1.0", path = "../videbimus-config" }
+videbimus-store = { version = "0.1.0", path = "../videbimus-store" }
+png = "0.18"
+fontdue = "0.9"
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints]
+workspace = true
