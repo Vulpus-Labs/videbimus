@@ -163,7 +163,7 @@ All three are costly, or fragile, for per-frame components.
      that read a fixed key.
    - **The root** is the top-level component `video`'s `root="…"` names,
      or else the only top-level node that isn't `video`, `requires`,
-     `binary`, `store`, `asset` or `group`. Several and no `root` is an
+     `binary`, `store`, `asset`, `group` or `output` (ticket 0007). Several and no `root` is an
      error naming them; none is a project of assets only.
    - **The store** is `store "<dir>"` (relative to the config file),
      else `.videbimus/store` beside the config; `--store` overrides.
@@ -184,7 +184,9 @@ All three are costly, or fragile, for per-frame components.
      `preview <frames>` builds what those frames need and writes them as
      PNG; `status` lists each asset's latest build (the live view is
      ticket 0005); `stop` sends Ctrl-C to the build holding the store's
-     lock on this machine; `review` waits for ticket 0007. Exit codes: 0,
+     lock on this machine; `review` assembles the output's built
+     segments (ADR 0008 §7). With an `output`, `build` also builds and
+     exports it. Exit codes: 0,
      1 failed, 2 usage, 130 stopped.
 
 8. **Projects stay outside videbimus.** A project crate depends on `videbimus` and

@@ -341,12 +341,13 @@ impl AssetRead {
     }
 }
 
-/// Where a [`Builder`] records [`AssetRead`]s, and the store kinds read
-/// named assets from.
+/// Where a [`Builder`] records [`AssetRead`]s and the kinds it built, and
+/// the store kinds read named assets from.
 #[derive(Debug, Default)]
 pub struct AssetReads {
     store: Option<PathBuf>,
     reads: RefCell<Vec<AssetRead>>,
+    kinds: RefCell<std::collections::BTreeSet<&'static str>>,
 }
 
 impl AssetReads {
@@ -356,12 +357,20 @@ impl AssetReads {
         Self {
             store,
             reads: RefCell::new(Vec::new()),
+            kinds: RefCell::default(),
         }
     }
 
     /// The reads recorded so far, emptying the record.
     pub fn take(&self) -> Vec<AssetRead> {
         self.reads.take()
+    }
+
+    /// The component kinds built so far, sorted: whose code identities
+    /// go into the key of whatever renders the tree (ticket 0007).
+    #[must_use]
+    pub fn kinds(&self) -> Vec<&'static str> {
+        self.kinds.borrow().iter().copied().collect()
     }
 }
 
@@ -419,8 +428,13 @@ impl<'a> Builder<'a> {
     /// If the kind isn't registered (suggesting the nearest that is), or
     /// the kind's own errors.
     pub fn build(&self, node: &Node, r: &Resolver) -> Result<Box<dyn Component>, Error> {
-        match self.registry.kinds.get(node.kind()) {
-            Some(e) => (e.make)(node, r, self),
+        match self.registry.kinds.get_key_value(node.kind()) {
+            Some((kind, e)) => {
+                if let Some(reads) = self.reads {
+                    reads.kinds.borrow_mut().insert(kind);
+                }
+                (e.make)(node, r, self)
+            }
             None => Err(self.unknown(node)),
         }
     }

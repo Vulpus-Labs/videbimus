@@ -8,6 +8,7 @@
 //! binary "fenland" run="cargo run -p fenland --"   // which binary has them
 //! store "../fenland-store"                         // optional
 //! video rate=30 width=1920 height=1080 root="main" // root: optional
+//! output "film.mp4" { audio asset="song" }         // optional
 //!
 //! asset "song" recipe="song-render" { … }          // named "song"
 //! group "s07" {
@@ -31,13 +32,16 @@
 //!   command line's `--store` overrides both.
 //! - **The root** is the top-level component that is the video: the one
 //!   `video`'s `root` names, or else the only top-level node that isn't
-//!   one of `video`, `requires`, `binary`, `store`, `asset` and `group`.
+//!   one of `video`, `requires`, `binary`, `store`, `asset`, `group` and `output`.
 //!   Several candidates and no `root` is an error naming them; none is a
 //!   project of assets only.
 //! - **`asset`** declares an asset and its recipe kind. Its children
 //!   `input "<label>" "<asset name>"` are its inputs: graph edges, each
 //!   keyed under its label. Everything else on the node is the recipe
 //!   kind's.
+//! - **`output`** is the encoded video: its file, segment length,
+//!   encoding and audio (see [`videbimus_output`]). Its segments and join
+//!   are tasks in the graph, named under `output/`.
 //! - **`group "<name>"`** holds assets (and groups), and is part of their
 //!   names. A group is the place in the scene its assets belong to, for
 //!   the progress tree: name it after the scene (`s07`).
@@ -71,16 +75,19 @@ use std::sync::Arc;
 
 use videbimus_config::{Config, Error, Node, Origin, Resolver};
 use videbimus_core::Interval;
+use videbimus_output::{Output, PlanContext};
 use videbimus_runtime::registry::did_you_mean;
 use videbimus_runtime::{AssetRead, AssetReads, DriveOptions, ReadBy, Scene};
 use videbimus_scheduler::{Graph, NodeId, Target};
 use videbimus_store::Shape;
 
 use crate::App;
-use crate::recipe::{INPUT, RecipeContext};
+use crate::recipe::{INPUT, RecipeContext, canonical_config};
 
 /// Top-level node kinds that aren't components.
-pub const RESERVED: [&str; 6] = ["video", "requires", "binary", "store", "asset", "group"];
+pub const RESERVED: [&str; 7] = [
+    "video", "requires", "binary", "store", "asset", "group", "output",
+];
 
 /// Where the store is, by default, relative to the config file's
 /// directory.
@@ -113,6 +120,7 @@ pub struct Project {
     root: Option<usize>,
     reads: Vec<AssetRead>,
     wired: Vec<(NodeId, AssetRead)>,
+    output: Option<Output>,
 }
 
 impl std::fmt::Debug for Project {
@@ -166,6 +174,7 @@ impl Project {
             root,
             reads: Vec::new(),
             wired: Vec::new(),
+            output: None,
             config,
         };
         if project.root.is_some() {
@@ -174,6 +183,7 @@ impl Project {
             project.reads = reads.take();
             project.wired = project.wire()?;
         }
+        project.output = project.plan_output(app)?;
         Ok(project)
     }
 
@@ -230,6 +240,39 @@ impl Project {
     #[must_use]
     pub fn wired(&self) -> &[(NodeId, AssetRead)] {
         &self.wired
+    }
+
+    /// The encoded output the config declares (`output`), planned: its
+    /// segments and join are in the [`graph`](Self::graph).
+    #[must_use]
+    pub fn output(&self) -> Option<&Output> {
+        self.output.as_ref()
+    }
+
+    /// Adds the output's tasks to the graph (ticket 0007).
+    fn plan_output(&mut self, app: &App) -> Result<Option<Output>, Error> {
+        let r = self.config.resolver();
+        let mut scene_identity = Vec::new();
+        if let Some(video) = self.config.nodes_of("video").next() {
+            scene_identity.extend(canonical_config(video, r));
+        }
+        if let Some(root) = self.root() {
+            scene_identity.push(b'\n');
+            scene_identity.extend(canonical_config(root, r));
+        }
+        let assets = &self.assets;
+        let lookup = |name: &str| assets.iter().find(|a| a.name == name).map(|a| a.node);
+        let cx = PlanContext {
+            config: &self.config,
+            root: self.root,
+            registry: app.components(),
+            store: &self.store,
+            scene_identity,
+            wired: &self.wired,
+            asset: &lookup,
+            asset_names: assets.iter().map(|a| a.name.as_str()).collect(),
+        };
+        Output::plan(&cx, &mut self.graph)
     }
 
     /// A fresh scene of the root, reading assets from the project's

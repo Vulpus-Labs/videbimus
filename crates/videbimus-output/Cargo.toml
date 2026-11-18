@@ -1,0 +1,27 @@
+[package]
+name = "videbimus-output"
+description = "videbimus's output: the composite rendered and encoded in keyed segments with persisted state, joined by stream copy, audio muxed; and review of what exists"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+videbimus-core = { version = "0.1.0", path = "../videbimus-core" }
+videbimus-config = { version = "0.1.0", path = "../videbimus-config" }
+videbimus-store = { version = "0.1.0", path = "../videbimus-store" }
+videbimus-scheduler = { version = "0.1.0", path = "../videbimus-scheduler" }
+videbimus-runtime = { version = "0.1.0", path = "../videbimus-runtime" }
+blake3 = "1"
+libc = "0.2"
+serde_json = "1"
+
+[build-dependencies]
+videbimus-build = { version = "0.1.0", path = "../videbimus-build" }
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints]
+workspace = true

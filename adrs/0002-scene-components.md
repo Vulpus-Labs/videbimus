@@ -95,6 +95,20 @@ didn't jump when it came back.
      over which video frames. The project turns those reads into
      scheduler targets (ADR 0009 §7). A frame player reads
      `asset="s07/blender"` from the project's store.
+   - **Persisted state** (ticket 0007, ADR 0008 §4). Checkpoints stay
+     in memory; to carry state between processes a component may also
+     implement `save_state() -> Option<Vec<u8>>` and `load_state(&[u8])`
+     on `Component`, both declined by default. A `Child` saves its frame
+     and its component's bytes, or "unknown"; `sequence`, `stack` and
+     `filter` save their children's (`save_children`/`load_children`),
+     and `Scene::save_state`/`load_state` do the whole tree. A child
+     that saved nothing, or doesn't take its bytes, is left fresh and
+     caught up as usual, so loading a state never changes a frame. State
+     depending on asset content shouldn't be saved: a saved state is
+     keyed by config and code only.
+   - **Kinds built** are recorded by a reading builder
+     (`AssetReads::kinds`), so the output's keys include exactly the
+     code identities of the kinds in the scene.
 
 ## Consequences
 

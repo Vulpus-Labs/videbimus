@@ -52,6 +52,7 @@ pub use recipe::{
 
 pub use videbimus_config as config;
 pub use videbimus_core as core;
+pub use videbimus_output as output;
 pub use videbimus_runtime as runtime;
 pub use videbimus_scheduler as scheduler;
 pub use videbimus_store as store;

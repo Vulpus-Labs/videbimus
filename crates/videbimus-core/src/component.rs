@@ -167,6 +167,25 @@ pub trait Component {
     fn restore(&mut self, _cp: &Checkpoint) -> bool {
         false
     }
+
+    /// The current state as bytes, to persist with an output segment so a
+    /// later process can resume from it (ADR 0008 §4). `None` (the
+    /// default) if it can't: the framework then catches it up as usual.
+    ///
+    /// Persist only state that follows from config and frame numbers. A
+    /// persisted state is reused while the scene's config and kinds' code
+    /// are unchanged, but not checked against the content of assets it
+    /// read; a component whose state depends on asset content should
+    /// return `None`. Containers save their children's states.
+    fn save_state(&self) -> Option<Vec<u8>> {
+        None
+    }
+
+    /// Restores bytes from [`save_state`](Self::save_state). Returns
+    /// whether it could; on `false` the framework catches it up as usual.
+    fn load_state(&mut self, _bytes: &[u8]) -> bool {
+        false
+    }
 }
 
 #[cfg(test)]

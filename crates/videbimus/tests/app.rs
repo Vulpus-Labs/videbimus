@@ -582,7 +582,7 @@ fn build_runs_then_caches() {
 }
 
 #[test]
-fn usage_errors_and_unbuilt_commands() {
+fn usage_errors_and_a_review_without_output() {
     let d = Dir::new(SCENE);
     let (code, c) = d.run(&app(), &["frobnicate"]);
     assert_eq!(code, ExitCode::from(2));
@@ -599,7 +599,7 @@ fn usage_errors_and_unbuilt_commands() {
     assert_eq!(code, ExitCode::FAILURE);
     assert_eq!(
         c.err(),
-        "review isn't available yet: it needs the segmented output of ticket 0007\n"
+        "error: the config declares no output to review; add output \"film.mp4\" at the top\n"
     );
 
     let (code, c) = d.run(&app(), &["stop"]);
@@ -627,4 +627,61 @@ fn the_stock_binary() {
         "{err}"
     );
     assert!(err.contains("= note: this binary is `videbimus`"), "{err}");
+}
+
+// ---- output (ticket 0007)
+
+#[test]
+fn build_encodes_the_output_and_review_assembles_it() {
+    let ffmpeg = std::process::Command::new("ffmpeg")
+        .arg("-version")
+        .output();
+    if !ffmpeg.is_ok_and(|o| o.status.success()) {
+        eprintln!("skipping: ffmpeg isn't on the path");
+        return;
+    }
+    let d = Dir::new(
+        r#"
+video rate=30 width=4 height=2
+asset "s01/frames" recipe="fake-frames" from=(f)0 to=(f)10 grey=0.5
+output "film.mp4" segment=(f)4 preset="ultrafast"
+sequence "main" to=(f)10 {
+    frame-player asset="s01/frames" start-index=2
+}
+"#,
+    );
+    let project = app().load(&d.config(), None).unwrap();
+    let o = project.output().unwrap();
+    assert_eq!(o.segments().len(), 3);
+    assert_eq!(
+        project.root().unwrap().name(),
+        Some("main"),
+        "output isn't a root"
+    );
+
+    // review before anything is built: all placeholders, nothing built
+    let (code, c) = d.run(&app(), &["review"]);
+    assert_eq!(code, ExitCode::SUCCESS, "{}", c.err());
+    assert!(
+        c.out()
+            .contains("film.review.mp4: 0 of 3 segments built, 10 frames shown as placeholders"),
+        "{}",
+        c.out()
+    );
+    assert!(!d.path().join(".videbimus/store").exists());
+
+    let (code, c) = d.run(&app(), &["build"]);
+    assert_eq!(code, ExitCode::SUCCESS, "{}{}", c.out(), c.err());
+    assert!(c.out().contains("output/join: finished"), "{}", c.out());
+    assert!(
+        c.out()
+            .ends_with(&format!("wrote {}\n", d.path().join("film.mp4").display()))
+    );
+    assert!(d.path().join("film.mp4").is_file());
+
+    let out = d.path().join("r.mp4");
+    let (code, c) = d.run(&app(), &["review", "--out", &out.display().to_string()]);
+    assert_eq!(code, ExitCode::SUCCESS, "{}", c.err());
+    assert!(c.out().contains("3 of 3 segments built"), "{}", c.out());
+    assert!(out.is_file());
 }

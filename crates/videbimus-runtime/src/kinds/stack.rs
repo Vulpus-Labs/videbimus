@@ -4,7 +4,7 @@ use videbimus_config::{Error, Node, Resolver};
 use videbimus_core::{AssetKey, Component, Context, Frame, Image, Interval};
 
 use crate::curve::{Envelope, read_ease, read_name};
-use crate::drive::Child;
+use crate::drive::{Child, load_children, save_children};
 use crate::raster::{Blend, composite};
 use crate::registry::{Builder, ComponentKind};
 
@@ -103,6 +103,14 @@ impl Component for Stack {
             layer.child.render(n, ctx, &mut self.scratch);
             composite(out, &self.scratch, opacity, layer.blend);
         }
+    }
+
+    fn save_state(&self) -> Option<Vec<u8>> {
+        save_children(self.layers.iter().map(|l| &l.child))
+    }
+
+    fn load_state(&mut self, bytes: &[u8]) -> bool {
+        load_children(self.layers.iter_mut().map(|l| &mut l.child), bytes)
     }
 }
 

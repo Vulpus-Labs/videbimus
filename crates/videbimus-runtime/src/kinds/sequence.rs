@@ -3,7 +3,7 @@
 use videbimus_config::{Error, Node, Resolver};
 use videbimus_core::{AssetKey, Component, Context, Frame, Image, Interval};
 
-use crate::drive::Child;
+use crate::drive::{Child, load_children, save_children};
 use crate::registry::{Builder, ComponentKind};
 
 /// Children in order, each frame shown by the child whose interval holds
@@ -69,6 +69,14 @@ impl Component for Sequence {
         if let Some(c) = self.children.get_mut(i) {
             c.render(n, ctx, out);
         }
+    }
+
+    fn save_state(&self) -> Option<Vec<u8>> {
+        save_children(&self.children)
+    }
+
+    fn load_state(&mut self, bytes: &[u8]) -> bool {
+        load_children(&mut self.children, bytes)
     }
 }
 

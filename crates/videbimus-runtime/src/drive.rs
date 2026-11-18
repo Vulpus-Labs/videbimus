@@ -200,6 +200,51 @@ impl Child {
         self.position = Some(target);
     }
 
+    /// Its state as bytes, to persist across processes (ADR 0008 §4):
+    /// the frame its component is at and the component's
+    /// [`save_state`](Component::save_state). A component that can't
+    /// save, or hasn't been initialised, saves as "unknown", and is caught
+    /// up as usual after [`load_state`](Self::load_state). In-memory
+    /// checkpoints aren't saved.
+    #[must_use]
+    pub fn save_state(&self) -> Vec<u8> {
+        let saved = if self.initialised {
+            self.component.save_state()
+        } else {
+            None
+        };
+        let Some(bytes) = saved else {
+            return vec![STATE_UNKNOWN];
+        };
+        let mut out = Vec::with_capacity(bytes.len() + 18);
+        out.push(STATE_KNOWN);
+        out.extend_from_slice(&self.position.map_or(i64::MIN, |f| f.0).to_le_bytes());
+        out.extend_from_slice(&(bytes.len() as u64).to_le_bytes());
+        out.extend_from_slice(&bytes);
+        out
+    }
+
+    /// Restores bytes from [`save_state`](Self::save_state). Returns
+    /// whether the component took its state; if not (or it was saved as
+    /// unknown) it is left fresh, to be caught up as usual.
+    pub fn load_state(&mut self, bytes: &[u8]) -> bool {
+        let mut r = StateReader(bytes);
+        match r.u8() {
+            Some(STATE_KNOWN) => {}
+            _ => return false,
+        }
+        let (Some(position), Some(state)) = (r.i64(), r.blob()) else {
+            return false;
+        };
+        if !r.0.is_empty() || !self.component.load_state(state) {
+            return false;
+        }
+        self.initialised = true;
+        self.position = (position != i64::MIN).then_some(Frame(position));
+        self.checkpoints.clear();
+        true
+    }
+
     fn reset(&mut self, ctx: &Context) {
         self.component.reset(ctx);
         self.stats.resets += 1;
@@ -218,6 +263,82 @@ impl Child {
             self.stats.checkpoints += 1;
         }
     }
+}
+
+const STATE_UNKNOWN: u8 = 0;
+const STATE_KNOWN: u8 = 1;
+
+/// Reads the little-endian fields of a saved state.
+struct StateReader<'a>(&'a [u8]);
+
+impl<'a> StateReader<'a> {
+    fn take(&mut self, n: usize) -> Option<&'a [u8]> {
+        if self.0.len() < n {
+            return None;
+        }
+        let (a, b) = self.0.split_at(n);
+        self.0 = b;
+        Some(a)
+    }
+
+    fn u8(&mut self) -> Option<u8> {
+        self.take(1).map(|b| b[0])
+    }
+
+    fn u64(&mut self) -> Option<u64> {
+        self.take(8)
+            .map(|b| u64::from_le_bytes(b.try_into().expect("8 bytes")))
+    }
+
+    fn i64(&mut self) -> Option<i64> {
+        self.take(8)
+            .map(|b| i64::from_le_bytes(b.try_into().expect("8 bytes")))
+    }
+
+    fn blob(&mut self) -> Option<&'a [u8]> {
+        let n = usize::try_from(self.u64()?).ok()?;
+        self.take(n)
+    }
+}
+
+/// A container's [`Component::save_state`]: each child's
+/// [`Child::save_state`], in order. Always `Some`: a child that can't save
+/// is recorded as unknown.
+#[must_use]
+pub fn save_children<'a>(children: impl IntoIterator<Item = &'a Child>) -> Option<Vec<u8>> {
+    let states: Vec<Vec<u8>> = children.into_iter().map(Child::save_state).collect();
+    let mut out = Vec::new();
+    out.extend_from_slice(&(states.len() as u64).to_le_bytes());
+    for s in states {
+        out.extend_from_slice(&(s.len() as u64).to_le_bytes());
+        out.extend_from_slice(&s);
+    }
+    Some(out)
+}
+
+/// A container's [`Component::load_state`], from [`save_children`]: each
+/// child takes its state, or is left to catch up. `false` if the bytes
+/// don't hold one state per child (nothing is loaded then).
+pub fn load_children<'a>(children: impl IntoIterator<Item = &'a mut Child>, bytes: &[u8]) -> bool {
+    let children: Vec<&mut Child> = children.into_iter().collect();
+    let mut r = StateReader(bytes);
+    if r.u64().and_then(|n| usize::try_from(n).ok()) != Some(children.len()) {
+        return false;
+    }
+    let mut states = Vec::with_capacity(children.len());
+    for _ in 0..children.len() {
+        let Some(s) = r.blob() else {
+            return false;
+        };
+        states.push(s);
+    }
+    if !r.0.is_empty() {
+        return false;
+    }
+    for (c, s) in children.into_iter().zip(states) {
+        c.load_state(s);
+    }
+    true
 }
 
 /// The top of a component tree: renders frames of the whole video, in any
@@ -278,6 +399,22 @@ impl Scene {
     #[must_use]
     pub fn needs(&self) -> Vec<AssetKey> {
         self.root.needs(&self.ctx)
+    }
+
+    /// The whole tree's state, to persist (ADR 0008 §4): the root's
+    /// [`Child::save_state`], which containers fill with their children's.
+    #[must_use]
+    pub fn save_state(&self) -> Vec<u8> {
+        self.root.save_state()
+    }
+
+    /// Restores [`save_state`](Self::save_state)'s bytes into a fresh
+    /// scene of the same config. Components that took no state are caught
+    /// up as usual, so frames rendered afterwards are the same either way.
+    /// Returns whether the root took its state.
+    pub fn load_state(&mut self, bytes: &[u8]) -> bool {
+        self.recent.clear();
+        self.root.load_state(bytes)
     }
 
     /// Video frame `n`: transparent outside the root's interval.

@@ -5,7 +5,7 @@ use videbimus_core::{AssetKey, Component, Context, Frame, Image, Interval};
 
 use crate::color::parse_hex;
 use crate::curve::Envelope;
-use crate::drive::Child;
+use crate::drive::{Child, load_children, save_children};
 use crate::registry::{Builder, ComponentKind};
 
 /// One post-processing step.
@@ -245,6 +245,14 @@ impl Component for Filter {
         for e in &self.effects {
             e.apply(out, n, self.interval.len(), ctx.absolute(n));
         }
+    }
+
+    fn save_state(&self) -> Option<Vec<u8>> {
+        save_children(std::iter::once(&self.child))
+    }
+
+    fn load_state(&mut self, bytes: &[u8]) -> bool {
+        load_children(std::iter::once(&mut self.child), bytes)
     }
 }
 

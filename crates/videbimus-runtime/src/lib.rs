@@ -50,7 +50,7 @@ pub mod kinds;
 pub mod raster;
 pub mod registry;
 
-pub use drive::{Child, DriveOptions, DriveStats, Scene};
+pub use drive::{Child, DriveOptions, DriveStats, Scene, load_children, save_children};
 pub use registry::{
     AssetRead, AssetReads, Builder, CodeIdentity, ComponentKind, ComponentRegistry, Constructor,
     ReadBy,

@@ -3,14 +3,17 @@
 //! ```text
 //! <binary> [--config FILE] [--store DIR] <command>
 //!
-//!   build [TARGET…] [--profile P]   build what the scene reads, or the named
-//!                                   assets (or groups); Ctrl-C stops, and
-//!                                   building again resumes
+//!   build [TARGET…] [--profile P]   build what the scene reads and the
+//!                                   output, or the named assets (or
+//!                                   groups); Ctrl-C stops, and building
+//!                                   again resumes
 //!   preview FRAMES [--out DIR] [--profile P]
 //!                                   build what those frames need, then render
 //!                                   them to PNG; FRAMES is N, A..B or A..=B
 //!   status                          the latest build of every asset
-//!   review                          not yet available (ticket 0007)
+//!   review [--out FILE] [--open]    assemble the output's built segments,
+//!                                   with placeholders for the rest, into a
+//!                                   review file; builds nothing
 //!   stop                            stop the build running on the store
 //! ```
 //!
@@ -29,7 +32,8 @@ use std::sync::{Arc, Mutex};
 use videbimus_core::{Frame, Interval};
 use videbimus_runtime::color::write_png;
 use videbimus_scheduler::{
-    EarlyCutoff, Event, EventKind, Machine, Outcome, Profile, Scheduler, Target, stop_on_sigint,
+    EarlyCutoff, Event, EventKind, Machine, Outcome, Profile, RunReport, Scheduler, Target,
+    stop_on_sigint,
 };
 use videbimus_store::{LockHolder, Shape, Status, Store, machine_name};
 
@@ -145,6 +149,7 @@ struct Args {
     store: Option<PathBuf>,
     profile: Option<String>,
     out: Option<PathBuf>,
+    open: bool,
     help: bool,
     positional: Vec<String>,
 }
@@ -168,6 +173,7 @@ fn parse(args: impl Iterator<Item = String>) -> Result<Args, String> {
             "--store" => a.store = Some(value("--store")?.into()),
             "--profile" => a.profile = Some(value("--profile")?),
             "--out" => a.out = Some(value("--out")?.into()),
+            "--open" => a.open = true,
             "-h" | "--help" => a.help = true,
             "--" => a.positional.extend(it.by_ref()),
             f if f.starts_with('-')
@@ -187,19 +193,23 @@ fn usage(name: &str) -> String {
         "usage: {name} [--config FILE] [--store DIR] <command>
 
 commands:
-  build [TARGET…] [--profile P]   build what the scene reads, or the named assets or groups
+  build [TARGET…] [--profile P]   build what the scene reads and the output, or the named
+                                  assets or groups
   preview FRAMES [--out DIR] [--profile P]
                                   build what those frames need and render them to PNG
                                   (FRAMES: N, A..B or A..=B)
   status                          the latest build of every asset
-  review                          review the video (not yet available: ticket 0007)
+  review [--out FILE] [--open]    assemble the built segments, with placeholders for the
+                                  rest, into a review file (and open it); builds nothing
   stop                            stop the build running on the store
 
 options:
   --config FILE   the config (default {DEFAULT_CONFIG})
   --store DIR     the asset store (default: the config's `store`, else {store} beside it)
   --profile P     interactive, background or overnight
-  --out DIR       where preview writes frames (default {DEFAULT_PREVIEW} beside the config)",
+  --out PATH      where preview writes frames (default {DEFAULT_PREVIEW} beside the config),
+                  or review its file (default <output>.review.<ext> beside the output)
+  --open          open the review file with the system's player",
         store = crate::project::DEFAULT_STORE
     )
 }
@@ -241,11 +251,7 @@ pub(crate) fn run(
         "build" => cx.build(&a.positional[1..]),
         "preview" => cx.preview(&a.positional[1..]),
         "status" => cx.status(),
-        "review" => {
-            console
-                .warn("review isn't available yet: it needs the segmented output of ticket 0007");
-            ExitCode::FAILURE
-        }
+        "review" => cx.review(&a.positional[1..]),
         "stop" => cx.stop(),
         other => {
             console.warn(&format!(
@@ -297,7 +303,8 @@ impl Cx<'_> {
 
     fn build(&self, names: &[String]) -> ExitCode {
         if self.args.out.is_some() {
-            self.console.warn("error: `--out` is for preview");
+            self.console
+                .warn("error: `--out` is for preview and review");
             return ExitCode::from(2);
         }
         let profile = match self.profile("background") {
@@ -316,7 +323,10 @@ impl Cx<'_> {
             if project.root().is_none() {
                 Vec::new() // every asset
             } else {
-                let t = project.scene_targets(None);
+                let mut t = project.scene_targets(None);
+                if let Some(o) = project.output() {
+                    t.push(o.target());
+                }
                 if t.is_empty() {
                     self.console.say(
                         "nothing to build: the scene reads no assets (name assets to build them)",
@@ -334,15 +344,119 @@ impl Cx<'_> {
                 }
             }
         };
-        match self.schedule(&project, &targets, profile) {
-            Some(Outcome::Complete) => ExitCode::SUCCESS,
-            Some(Outcome::Stopped) => ExitCode::from(STOPPED),
-            Some(Outcome::Failed) | None => ExitCode::FAILURE,
+        let Some(report) = self.schedule_report(&project, &targets, profile) else {
+            return ExitCode::FAILURE;
+        };
+        match report.outcome {
+            Outcome::Complete => self.export(&project, &report),
+            Outcome::Stopped => ExitCode::from(STOPPED),
+            Outcome::Failed => ExitCode::FAILURE,
         }
+    }
+
+    /// Copies the joined output, if this run built or found it, to its
+    /// file (ticket 0007).
+    fn export(&self, project: &Project, report: &RunReport) -> ExitCode {
+        let Some(o) = project.output() else {
+            return ExitCode::SUCCESS;
+        };
+        let Some(key) = report.task(o.join_name()).and_then(|t| t.key) else {
+            return ExitCode::SUCCESS; // not requested
+        };
+        let store = match Store::open_read_only(project.store()) {
+            Ok(s) => s,
+            Err(e) => {
+                self.console.warn(&format!("error: {e}"));
+                return ExitCode::FAILURE;
+            }
+        };
+        match o.export(&store, key) {
+            Ok(path) => {
+                self.console.say(&format!("wrote {}", path.display()));
+                ExitCode::SUCCESS
+            }
+            Err(e) => {
+                self.console.warn(&format!("error: {e}"));
+                ExitCode::FAILURE
+            }
+        }
+    }
+
+    fn review(&self, rest: &[String]) -> ExitCode {
+        if !rest.is_empty() || self.args.profile.is_some() {
+            self.console.warn(&format!(
+                "error: review takes no arguments but --out FILE and --open\n\n{}",
+                usage(self.app.name())
+            ));
+            return ExitCode::from(2);
+        }
+        let Some(project) = self.load() else {
+            return ExitCode::FAILURE;
+        };
+        let Some(o) = project.output() else {
+            self.console.warn(
+                "error: the config declares no output to review; add output \"film.mp4\" at the top",
+            );
+            return ExitCode::FAILURE;
+        };
+        let dest = self
+            .args
+            .out
+            .clone()
+            .unwrap_or_else(|| o.default_review_path());
+        let review = match o.review(project.store(), &dest) {
+            Ok(r) => r,
+            Err(e) => {
+                self.console.warn(&format!("error: {e}"));
+                return ExitCode::FAILURE;
+            }
+        };
+        let missing: i64 = review.missing.iter().map(|iv| iv.len()).sum();
+        self.console.say(&format!(
+            "wrote {}: {} of {} segments built{}{}",
+            review.path.display(),
+            review.segments - review.missing.len(),
+            review.segments,
+            if missing > 0 {
+                format!(", {missing} frames shown as placeholders")
+            } else {
+                String::new()
+            },
+            if o.spec().audio.is_some() && !review.audio {
+                ", no audio yet"
+            } else {
+                ""
+            }
+        ));
+        if self.args.open {
+            let opener = if cfg!(target_os = "macos") {
+                "open"
+            } else if cfg!(windows) {
+                "explorer"
+            } else {
+                "xdg-open"
+            };
+            if let Err(e) = std::process::Command::new(opener).arg(&review.path).spawn() {
+                self.console
+                    .warn(&format!("warning: couldn't open it with {opener}: {e}"));
+            }
+        }
+        ExitCode::SUCCESS
     }
 
     /// Runs the scheduler on `targets`, printing a line per event.
     fn schedule(&self, project: &Project, targets: &[Target], profile: Profile) -> Option<Outcome> {
+        self.schedule_report(project, targets, profile)
+            .map(|r| r.outcome)
+    }
+
+    /// As [`schedule`](Self::schedule), with the whole report.
+    fn schedule_report(
+        &self,
+        project: &Project,
+        targets: &[Target],
+        profile: Profile,
+    ) -> Option<RunReport> {
         let (store, warnings) = match Store::open(project.store()) {
             Ok(s) => s,
             Err(e) => {
@@ -364,7 +478,7 @@ impl Cx<'_> {
         let sink = move |e: &Event| console.say(&event_line(&e.kind));
         let scheduler = Scheduler::new(store, profile).with_sink(Arc::new(sink));
         match scheduler.run(project.graph(), targets) {
-            Ok(report) => Some(report.outcome),
+            Ok(report) => Some(report),
             Err(e) => {
                 self.console.warn(&format!("error: {e}"));
                 None

@@ -467,6 +467,7 @@ dependencies = [
  "videbimus-build",
  "videbimus-config",
  "videbimus-core",
+ "videbimus-output",
  "videbimus-runtime",
  "videbimus-scheduler",
  "videbimus-store",
@@ -492,6 +493,22 @@ dependencies = [
 [[package]]
 name = "videbimus-core"
 version = "0.1.0"
+
+[[package]]
+name = "videbimus-output"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "libc",
+ "serde_json",
+ "tempfile",
+ "videbimus-build",
+ "videbimus-config",
+ "videbimus-core",
+ "videbimus-runtime",
+ "videbimus-scheduler",
+ "videbimus-store",
+]
 
 [[package]]
 name = "videbimus-runtime"
