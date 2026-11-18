@@ -523,6 +523,28 @@ fn a_single_output_is_one_whole_chunk() {
 }
 
 #[test]
+fn external_load_keeps_the_highest_noted_across_resumes() {
+    let dir = tempfile::tempdir().unwrap();
+    let (store, _) = Store::open(dir.path()).unwrap();
+    let inputs = shot("load");
+    let mut asset = store.begin("s07/blender", &inputs, seq(0, 2)).unwrap();
+    asset.note_external_load(30);
+    asset.note_external_load(10);
+    let c = asset.chunk(frames(0, 1)).unwrap();
+    c.commit(CommitOptions::default()).unwrap();
+    asset.fail("stopped").unwrap();
+    let m = store.manifest(inputs.key()).unwrap().unwrap();
+    assert_eq!(m.external_load_pct, Some(30));
+
+    let mut asset = store.begin("s07/blender", &inputs, seq(0, 2)).unwrap();
+    asset.note_external_load(20);
+    let c = asset.chunk(frames(1, 2)).unwrap();
+    c.commit(CommitOptions::default()).unwrap();
+    let m = asset.finish(None).unwrap();
+    assert_eq!(m.external_load_pct, Some(30));
+}
+
+#[test]
 fn a_key_keeps_its_shape() {
     let dir = tempfile::tempdir().unwrap();
     let (store, _) = Store::open(dir.path()).unwrap();

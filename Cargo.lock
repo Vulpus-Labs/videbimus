@@ -442,6 +442,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "videbimus-scheduler"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "videbimus-core",
+ "videbimus-store",
+]
+
+[[package]]
 name = "videbimus-store"
 version = "0.1.0"
 dependencies = [

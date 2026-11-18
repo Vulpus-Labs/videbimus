@@ -1,0 +1,21 @@
+[package]
+name = "videbimus-scheduler"
+description = "videbimus's scheduler: tasks, profiles and budgets, cost history, critical path, chunking, subprocess control, stop"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+videbimus-core = { path = "../videbimus-core" }
+videbimus-store = { path = "../videbimus-store" }
+serde = { version = "1", features = ["derive"] }
+libc = "0.2"
+
+[dev-dependencies]
+serde_json = "1"
+tempfile = "3"
+
+[lints]
+workspace = true

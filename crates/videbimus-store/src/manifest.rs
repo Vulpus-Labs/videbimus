@@ -192,6 +192,12 @@ pub struct Manifest {
     /// The highest peak memory of any chunk or of the task, in bytes.
     #[serde(default)]
     pub peak_memory_bytes: Option<u64>,
+    /// Other work on the machine while it was built, in hundredths of a
+    /// core: the highest the scheduler saw when starting any of its
+    /// chunks. A measured cost is ignored as history when this is high
+    /// (ADR 0004 §2). `None` if not measured.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub external_load_pct: Option<u32>,
     /// The hash of its output, if every chunk was hashed (early cutoff,
     /// ADR 0003 §4). Independent of how the frames were chunked.
     #[serde(default, with = "crate::hex::opt_digest")]

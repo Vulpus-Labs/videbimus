@@ -390,6 +390,7 @@ impl Store {
                     finished_ms: None,
                     build_ms: None,
                     peak_memory_bytes: None,
+                    external_load_pct: None,
                     output_hash: None,
                     log: LOG.to_owned(),
                 };
@@ -767,6 +768,15 @@ impl AssetWriter {
             started_ms: now_ms(),
             done: false,
         })
+    }
+
+    /// Notes other work seen on the machine while building, in hundredths
+    /// of a core ([`Manifest::external_load_pct`]). Keeps the highest
+    /// noted, across resumed runs too; written by
+    /// [`finish`](Self::finish) or [`fail`](Self::fail).
+    pub fn note_external_load(&mut self, pct: u32) {
+        let m = &mut self.manifest;
+        m.external_load_pct = Some(m.external_load_pct.map_or(pct, |p| p.max(pct)));
     }
 
     /// Marks the asset complete: every frame committed. Records the total
