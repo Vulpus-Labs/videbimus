@@ -117,6 +117,13 @@ pub trait Task: Send + Sync + 'static {
         None
     }
 
+    /// Its resolved config, as text, for its task log (ADR 0007 §1). The
+    /// key holds only the config's digest; this is what a reader of the
+    /// log needs to see. `None` logs nothing.
+    fn config_text(&self) -> Option<String> {
+        None
+    }
+
     /// Builds one chunk: [`TaskContext::chunk`]'s frames (or the whole
     /// output) into [`TaskContext::out_dir`]. Poll
     /// [`TaskContext::is_cancelled`] in long loops; subprocesses run

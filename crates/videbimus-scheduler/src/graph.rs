@@ -217,6 +217,41 @@ impl Graph {
         &self.nodes[id.0].task
     }
 
+    /// The name of the task at `id`.
+    ///
+    /// # Panics
+    ///
+    /// If `id` isn't from this graph.
+    #[must_use]
+    pub fn name(&self, id: NodeId) -> &str {
+        &self.nodes[id.0].name
+    }
+
+    /// The labelled inputs of the task at `id`, in the order added.
+    ///
+    /// # Panics
+    ///
+    /// If `id` isn't from this graph.
+    #[must_use]
+    pub fn inputs(&self, id: NodeId) -> &[(String, NodeId)] {
+        &self.nodes[id.0].inputs
+    }
+
+    /// The scene path the task at `id` is grouped under, if any.
+    ///
+    /// # Panics
+    ///
+    /// If `id` isn't from this graph.
+    #[must_use]
+    pub fn group(&self, id: NodeId) -> Option<&str> {
+        self.nodes[id.0].group.as_deref()
+    }
+
+    /// Every node, in the order added (inputs before their dependants).
+    pub fn ids(&self) -> impl Iterator<Item = NodeId> + '_ {
+        (0..self.nodes.len()).map(NodeId)
+    }
+
     /// The nodes nothing depends on: the final outputs.
     #[must_use]
     pub fn sinks(&self) -> Vec<NodeId> {

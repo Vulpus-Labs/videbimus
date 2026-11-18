@@ -10,7 +10,8 @@
 //!   preview FRAMES [--out DIR] [--profile P]
 //!                                   build what those frames need, then render
 //!                                   them to PNG; FRAMES is N, A..B or A..=B
-//!   status                          the latest build of every asset
+//!   status                          the running build's progress tree, or the
+//!                                   last run and whether each asset is current
 //!   review [--out FILE] [--open]    assemble the output's built segments,
 //!                                   with placeholders for the rest, into a
 //!                                   review file; builds nothing
@@ -21,6 +22,10 @@
 //! `build` and `interactive` for `preview`; `overnight` is the third.
 //! Exit codes: 0 done, 1 failed, 2 usage, 130 stopped.
 //!
+//! `build` and `preview` record each run in the store (ADR 0007): its
+//! events in `runs/`, its progress tree in `status.json`. On a terminal
+//! the tree is drawn live; otherwise a line per event is printed.
+//!
 //! [ADR 0009]: ../../../adrs/0009-using-videbimus.md
 
 use std::fmt::Write as _;
@@ -30,12 +35,13 @@ use std::process::ExitCode;
 use std::sync::{Arc, Mutex};
 
 use videbimus_core::{Frame, Interval};
+use videbimus_progress::{Recorder, View};
 use videbimus_runtime::color::write_png;
 use videbimus_scheduler::{
     EarlyCutoff, Event, EventKind, Machine, Outcome, Profile, RunReport, Scheduler, Target,
     stop_on_sigint,
 };
-use videbimus_store::{LockHolder, Shape, Status, Store, machine_name};
+use videbimus_store::{LockHolder, Shape, Store, machine_name};
 
 use crate::App;
 use crate::project::Project;
@@ -140,6 +146,11 @@ impl Console {
     fn warn(&self, s: &str) {
         self.err.line(s);
     }
+
+    /// Whether output is standard output on a terminal: the live view.
+    fn is_terminal(&self) -> bool {
+        matches!(self.out, Sink::Std { err: false }) && videbimus_progress::stdout_is_terminal()
+    }
 }
 
 /// The parsed command line.
@@ -198,7 +209,8 @@ commands:
   preview FRAMES [--out DIR] [--profile P]
                                   build what those frames need and render them to PNG
                                   (FRAMES: N, A..B or A..=B)
-  status                          the latest build of every asset
+  status                          the running build's progress, or the last run and
+                                  whether each asset is current
   review [--out FILE] [--open]    assemble the built segments, with placeholders for the
                                   rest, into a review file (and open it); builds nothing
   stop                            stop the build running on the store
@@ -474,10 +486,29 @@ impl Cx<'_> {
                 "warning: Ctrl-C won't stop the build gracefully: {e}"
             ));
         }
-        let console = self.console.clone();
-        let sink = move |e: &Event| console.say(&event_line(&e.kind));
-        let scheduler = Scheduler::new(store, profile).with_sink(Arc::new(sink));
-        match scheduler.run(project.graph(), targets) {
+        let view = if self.console.is_terminal() {
+            View::live_stdout()
+        } else {
+            let console = self.console.clone();
+            View::Plain(Box::new(move |e: &Event| console.say(&event_line(&e.kind))))
+        };
+        let recorder = match Recorder::start(project.store(), view) {
+            Ok(r) => r,
+            Err(e) => {
+                self.console.warn(&format!(
+                    "error: can't start the run log in {}: {e}",
+                    project.store().display()
+                ));
+                return None;
+            }
+        };
+        let scheduler = Scheduler::new(store, profile).with_sink(recorder.sink());
+        let result = scheduler.run(project.graph(), targets);
+        let (_, recording_error) = recorder.finish();
+        if let Some(e) = recording_error {
+            self.console.warn(&format!("warning: {e}"));
+        }
+        match result {
             Ok(report) => Some(report),
             Err(e) => {
                 self.console.warn(&format!("error: {e}"));
@@ -572,21 +603,6 @@ impl Cx<'_> {
         let Some(project) = self.load() else {
             return ExitCode::FAILURE;
         };
-        let store = if project.store().is_dir() {
-            match Store::open_read_only(project.store()) {
-                Ok(s) => Some(s),
-                Err(e) => {
-                    self.console.warn(&format!("error: {e}"));
-                    return ExitCode::FAILURE;
-                }
-            }
-        } else {
-            None
-        };
-        self.console.say(&format!(
-            "latest builds in {} (the live view is ticket 0005)",
-            project.store().display()
-        ));
         if let Some(root) = project.root() {
             let mut read: Vec<&str> = project
                 .wired()
@@ -605,20 +621,18 @@ impl Cx<'_> {
                 }
             ));
         }
-        let width = project
-            .assets()
-            .iter()
-            .map(|a| a.name.len())
-            .max()
-            .unwrap_or(0);
-        for a in project.assets() {
-            let state = store
-                .as_ref()
-                .map_or_else(|| Ok("not built".to_owned()), |s| latest_state(s, &a.name));
-            let state = state.unwrap_or_else(|e| format!("unreadable: {e}"));
-            self.console
-                .say(&format!("{:width$}  {}  {state}", a.name, a.recipe));
-        }
+        let width = if self.console.is_terminal() {
+            videbimus_progress::terminal_size().0
+        } else {
+            100
+        };
+        let report = videbimus_progress::status_report(
+            project.graph(),
+            project.store(),
+            width,
+            videbimus_progress::now_ms(),
+        );
+        self.console.say(report.trim_end());
         ExitCode::SUCCESS
     }
 
@@ -691,24 +705,6 @@ fn interrupt(_: u32) -> std::io::Result<()> {
         std::io::ErrorKind::Unsupported,
         "stop is Unix-only; press Ctrl-C in the build's terminal",
     ))
-}
-
-fn latest_state(store: &Store, name: &str) -> Result<String, videbimus_store::Error> {
-    let Some(key) = store.latest(name)? else {
-        return Ok("not built".to_owned());
-    };
-    let Some(p) = store.progress(key)? else {
-        return Ok("not built".to_owned());
-    };
-    let frames = match p.shape {
-        Shape::Single => String::new(),
-        Shape::Frames(_) => format!(", {}/{} frames", p.done_frames, p.total_frames),
-    };
-    Ok(match p.status {
-        Status::Complete => format!("complete{frames} ({key})"),
-        Status::Building => format!("partial{frames} ({key})"),
-        Status::Failed { message } => format!("failed{frames} ({key}): {message}"),
-    })
 }
 
 /// The file a preview writes video frame `f` to.

@@ -555,7 +555,7 @@ fn preview_writes_frames() {
         s.contains("scene sequence \"main\" reads: s01/frames"),
         "{s}"
     );
-    assert!(s.contains("unused      fake-frames  not built"), "{s}");
+    assert!(s.contains("unused      missing  never built"), "{s}");
 }
 
 #[test]

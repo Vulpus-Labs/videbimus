@@ -228,6 +228,7 @@ impl RecipeRegistry {
         Ok(Box::new(KindTask {
             name: cx.name,
             code: cx.code.bytes(),
+            config: config_text(node),
             inner,
         }))
     }
@@ -415,11 +416,50 @@ fn write_value(out: &mut String, v: &Value, r: &Resolver) {
     };
 }
 
+/// `node` as resolved KDL text, for the task log (ADR 0007 §1): the
+/// whole declaration, `recipe` and `input`s included, with expressions
+/// and references resolved.
+fn config_text(node: &Node) -> String {
+    let mut out = String::new();
+    write_text(&mut out, node, 0);
+    out
+}
+
+fn write_text(out: &mut String, node: &Node, depth: usize) {
+    let _ = write!(out, "{:indent$}{}", "", node.kind(), indent = depth * 4);
+    for a in node.args() {
+        out.push(' ');
+        text_value(out, &a.value);
+    }
+    for p in node.props() {
+        let _ = write!(out, " {}=", p.key);
+        text_value(out, &p.value.value);
+    }
+    if node.children().is_empty() {
+        out.push('\n');
+        return;
+    }
+    out.push_str(" {\n");
+    for c in node.children() {
+        write_text(out, c, depth + 1);
+    }
+    let _ = writeln!(out, "{:indent$}}}", "", indent = depth * 4);
+}
+
+fn text_value(out: &mut String, v: &Value) {
+    let _ = match v {
+        Value::Time(t) => write!(out, "({}){}", t.unit.suffix(), t.amount),
+        v => write!(out, "{v}"),
+    };
+}
+
 /// A kind's task as the project hands it to the scheduler: named by the
-/// project, keyed with the kind's code identity.
+/// project, keyed with the kind's code identity, with its resolved config
+/// for the task log.
 struct KindTask {
     name: String,
     code: Vec<u8>,
+    config: String,
     inner: Box<dyn Task>,
 }
 
@@ -444,6 +484,11 @@ impl Task for KindTask {
     }
     fn chunk_frames(&self) -> Option<u32> {
         self.inner.chunk_frames()
+    }
+    fn config_text(&self) -> Option<String> {
+        self.inner
+            .config_text()
+            .or_else(|| Some(self.config.clone()))
     }
     fn run(&self, ctx: &TaskContext<'_>) -> Result<(), TaskError> {
         self.inner.run(ctx)

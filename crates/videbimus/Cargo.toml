@@ -14,6 +14,7 @@ videbimus-store = { version = "0.1.0", path = "../videbimus-store" }
 videbimus-scheduler = { version = "0.1.0", path = "../videbimus-scheduler" }
 videbimus-runtime = { version = "0.1.0", path = "../videbimus-runtime" }
 videbimus-output = { version = "0.1.0", path = "../videbimus-output" }
+videbimus-progress = { version = "0.1.0", path = "../videbimus-progress" }
 serde_json = "1"
 libc = "0.2"
 regex = "1"
@@ -25,6 +26,7 @@ videbimus-build = { version = "0.1.0", path = "../videbimus-build" }
 
 [dev-dependencies]
 tempfile = "3"
+videbimus-progress = { version = "0.1.0", path = "../videbimus-progress" }
 videbimus-build = { version = "0.1.0", path = "../videbimus-build" }
 
 [lints]

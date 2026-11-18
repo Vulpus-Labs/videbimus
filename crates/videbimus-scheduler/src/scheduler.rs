@@ -869,6 +869,12 @@ impl<'a> Run<'a> {
             self.s.control.profile().name
         ));
         log.line(&format!("why: {}", writer.why()));
+        if let Some(config) = def.task.config_text() {
+            log.line("config:");
+            for l in config.lines() {
+                log.line(&format!("    {l}"));
+            }
+        }
         for r in inputs.records() {
             log.line(&format!(
                 "input: {} {} {}{}",

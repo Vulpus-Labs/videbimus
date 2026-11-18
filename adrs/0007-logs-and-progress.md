@@ -45,6 +45,45 @@ looked like progress.
    output in the view and its log path, and its dependants show as blocked
    by it.
 
+## How it is built (ticket 0005)
+
+- **Where things are.** Each task's log is `<store>/<key>/log.txt`
+  (ADR 0003 §6). It records the task's resolved config as KDL text
+  (`Task::config_text`; the project supplies the asset's declaration
+  with references and expressions resolved), since the key holds only
+  its digest. Each run's events go to
+  `<store>/runs/<UTC time>-<pid>.jsonl`, one JSON object per event;
+  `<store>/runs/latest` names the newest; the newest 50 are kept. The
+  status file is `<store>/status.json`, rewritten (staged, synced,
+  renamed) every second and once when the run ends.
+- **States.** Besides §2's, a task can be *not needed* (everything that
+  reads it is cached), *blocked* (an input failed) or *cancelled* (the
+  run stopped first). A group's state is the first of running, queued,
+  failed, waiting, blocked, cancelled that any child has; else cached if
+  all are cached, else done.
+- **The tree's shape.** A task sits under its scene group if it has one,
+  else under its name's directories (`s07/blender` under `s07`).
+- **ETAs.** A task's remaining work is its frames not yet committed times
+  seconds per frame: from this run's committed chunks once there are
+  some, else from the plan's estimate (cost history, ADR 0004 §2). A
+  running chunk is credited with its reported progress, else with its
+  elapsed time (up to 90%). A task's ETA adds the longest ETA of its
+  unfinished inputs. The run's ETA is the longer of the longest such
+  chain and the remaining core-seconds spread over the core budget.
+- **Budget in the header**: cores granted to running chunks and their
+  declared memory, against the profile's limits.
+- **`videbimus status`** with a build running (its lock held by a live
+  process) prints the status file's tree. With none, it prints the last
+  run's outcome and failures, then each asset against the current
+  config: *current* (with frames committed under its key), *stale* (its
+  name's latest build has another key), *missing*, or *pending input*:
+  an input hashes its output (ADR 0003 §4) and isn't built under its
+  current key, so the asset's key can't be known yet. It never guesses.
+- **The terminal.** On a TTY the tree is redrawn in place with ANSI
+  escapes at most four times a second (and once a second for the
+  clocks), cut to the terminal's width and height. Otherwise a line per
+  event is printed, as before.
+
 ## Consequences
 
 - "Status?" is answered by `videbimus status`, with accurate ETAs.

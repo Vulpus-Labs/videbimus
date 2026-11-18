@@ -468,6 +468,7 @@ dependencies = [
  "videbimus-config",
  "videbimus-core",
  "videbimus-output",
+ "videbimus-progress",
  "videbimus-runtime",
  "videbimus-scheduler",
  "videbimus-store",
@@ -506,6 +507,19 @@ dependencies = [
  "videbimus-config",
  "videbimus-core",
  "videbimus-runtime",
+ "videbimus-scheduler",
+ "videbimus-store",
+]
+
+[[package]]
+name = "videbimus-progress"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "videbimus-core",
  "videbimus-scheduler",
  "videbimus-store",
 ]
