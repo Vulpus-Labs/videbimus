@@ -123,12 +123,12 @@ impl RecipeRegistry {
         Self::default()
     }
 
-    /// A registry with the built-in recipe kinds. None yet: the `command`
-    /// recipe (ticket 0011), file inputs and encode/mux (ticket 0007) are
-    /// registered here when they land.
+    /// A registry with the built-in recipe kinds: the `command` recipe
+    /// ([`CommandRecipe`](crate::command::CommandRecipe)). File inputs and encode/mux
+    /// (ticket 0007) are registered here when they land.
     #[must_use]
     pub fn with_builtins() -> Self {
-        Self::empty()
+        Self::empty().with::<crate::command::CommandRecipe>()
     }
 
     /// Adds kind `K`.
@@ -297,10 +297,19 @@ impl RecipeContext {
     /// scheduler.
     #[must_use]
     pub fn key(&self, node: &Node, r: &Resolver) -> KeyStart {
+        self.key_skipping(node, r, &[])
+    }
+
+    /// As [`key`](Self::key), leaving out of the canonical config what
+    /// the kind keys another way or that can't change its output:
+    /// `skip` names the kind's children (`"tool"`) and properties of
+    /// them (`"output.chunk"`), as [`canonical_config_skipping`].
+    #[must_use]
+    pub fn key_skipping(&self, node: &Node, r: &Resolver, skip: &[&str]) -> KeyStart {
         KeyStart {
             kind: self.kind.clone(),
             code: self.code.bytes(),
-            config: canonical_config(node, r),
+            config: canonical_config_skipping(node, r, skip),
         }
     }
 }
@@ -337,12 +346,20 @@ impl KeyStart {
 /// or it isn't musical, so `(s)1` and `(f)30` at 30 fps key alike.
 #[must_use]
 pub fn canonical_config(node: &Node, r: &Resolver) -> Vec<u8> {
+    canonical_config_skipping(node, r, &[])
+}
+
+/// As [`canonical_config`], without the node's children whose kind is
+/// in `skip` (`"tool"`), nor the properties `skip` names on its children
+/// as `"<child kind>.<property>"` (`"output.chunk"`).
+#[must_use]
+pub fn canonical_config_skipping(node: &Node, r: &Resolver, skip: &[&str]) -> Vec<u8> {
     let mut out = String::new();
     let args = match node.args().first() {
         Some(a) if matches!(a.value, Value::String(_)) => &node.args()[1..],
         _ => node.args(),
     };
-    write_node(&mut out, node.kind(), args, node, r, true);
+    write_node(&mut out, node.kind(), args, node, r, 0, skip);
     out.into_bytes()
 }
 
@@ -352,8 +369,10 @@ fn write_node(
     args: &[videbimus_config::Located<Value>],
     node: &Node,
     r: &Resolver,
-    top: bool,
+    depth: usize,
+    skip: &[&str],
 ) {
+    let top = depth == 0;
     let _ = write!(out, "node {}:{kind} args {}", kind.len(), args.len());
     for a in args {
         out.push(' ');
@@ -363,6 +382,7 @@ fn write_node(
         .props()
         .iter()
         .filter(|p| !(top && ASSET_PROPS.contains(&p.key.as_str())))
+        .filter(|p| !(depth == 1 && skip.contains(&format!("{kind}.{}", p.key).as_str())))
         .collect();
     props.sort_by(|a, b| a.key.cmp(&b.key));
     let _ = write!(out, " props {}", props.len());
@@ -373,11 +393,11 @@ fn write_node(
     let children: Vec<&Node> = node
         .children()
         .iter()
-        .filter(|c| !(top && c.kind() == INPUT))
+        .filter(|c| !(top && (c.kind() == INPUT || skip.contains(&c.kind()))))
         .collect();
     let _ = write!(out, " children {} {{", children.len());
     for c in children {
-        write_node(out, c.kind(), c.args(), c, r, false);
+        write_node(out, c.kind(), c.args(), c, r, depth + 1, skip);
     }
     out.push('}');
 }

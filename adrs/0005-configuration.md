@@ -75,6 +75,11 @@ Fenland's shot list (`shots.py`) needed more than literal values:
      and may enter the children of a resolved node (an earlier sibling,
      by kind or name), never of one still resolving. `$$` escapes a
      literal `$`.
+   - **Run-time references** (ticket 0011): a string that starts with
+     `$in`, `$out`, `$chunk`, `$cores`, `$script` or `$source` (or `$$`
+     and one of them) is kept as written, for the `command` recipe to
+     substitute when it runs (ADR 0009 §3). Those names can't be bound
+     with `let`.
    - **`let name=value`** binds in its block and the blocks inside it.
    - **Templates** are defined at the top level of a file (includes
      count). The using node's properties win; a child with the same kind

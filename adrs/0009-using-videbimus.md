@@ -45,6 +45,57 @@ All three are costly, or fragile, for per-frame components.
    - its cost, cores, memory, and whether it may run remotely.
 
    Blender, ffmpeg, Python and existing binaries are all command recipes.
+
+   **How it landed** (ticket 0011; `videbimus::command`):
+
+   ```kdl
+   asset "s14/blender" recipe="command" {
+       input "shot" "s14/shot"
+       tool "blender" path="…/Blender" version-from="blender --version" \
+           version-match="Blender ([0-9.]+)"
+       script "hwscene.py" name="scene"
+       env PHYS=1
+       cwd "."
+       run "blender" "-b" "-t" "$cores" "-P" "$script.scene" "--" \
+           "$in.shot" "$out" "--start" "$chunk.start" "--end" "$chunk.last"
+       output frames="####.png" from=(f)1 to=(f)279 chunk=8
+       cost per-frame=20 cores=4 mem="3G" gpu=#true remote=#true
+   }
+   ```
+
+   - **Substitutions** in `run`, `env` and `cwd`, anywhere in a string:
+     `$in.<label>` (a single input's directory; a frame sequence's
+     chunks linked into one temporary directory), `$out`, `$chunk.start`,
+     `$chunk.last` (inclusive, for Blender's `--end`), `$chunk.end` (one
+     past the last, like `to`), `$chunk.count`, `$cores` (granted),
+     `$script.<name>` and `$source.<name>` (absolute paths). `$$` is a
+     literal `$`; any other `$name` passes through for a shell. The
+     config keeps strings starting with these names as written (ADR 0005
+     §2). Unknown labels and names are located load errors.
+   - **Tools**: `version-from` runs at load, once per process (cached;
+     `forget_tool_versions` clears it), first non-empty line or
+     `version-match`'s first group. `version="…"` states it instead. A
+     probe that can't run is a load error naming the tool and the probe.
+     Only the version is keyed, not the path or the probe. `run`'s
+     program, if it names a tool, runs the tool's `path`; undeclared
+     programs run unkeyed.
+   - **Scripts and sources**: files or directories relative to the
+     config file, hashed at load into the key (as scripts or sources)
+     under their `name` (default: the file stem). Paths aren't keyed.
+   - **Not keyed**: `tool`, `script` and `source` nodes (keyed by
+     version and contents instead), `cost`, and `output`'s `chunk`
+     (chunks are planned over the missing frames, so resizing them keeps
+     what is committed).
+   - **Outputs**: `output file=` / `dir=` (several allowed), or one
+     `output frames="####.png" from= to= [chunk=]`. After a successful
+     exit every declared output, or every frame of the chunk, must exist,
+     else the chunk fails naming what is missing and what was written.
+     Frames are reported as progress while the command runs.
+   - **Cost**: `per-frame` or `per-run` seconds (default `per-run=60`),
+     `cores` (1), `mem` (0), `gpu`, `remote` (recorded on the task, not
+     yet used).
+   - The default `cwd` is the config file's directory; the command runs
+     directly, not through a shell.
 4. **A project binary registers its own kinds.** A crate with custom
    kinds has a `main` like:
 
@@ -85,8 +136,10 @@ All three are costly, or fragile, for per-frame components.
      `RecipeContext::key` starts a key with the kind, its code identity
      and the node's canonical config (properties sorted, times as
      seconds; the name, `recipe` and `input`s left out, since they are
-     keyed as the kind and the inputs). The built-in recipe registry is
-     empty until the `command` recipe (ticket 0011).
+     keyed as the kind and the inputs). `RecipeContext::key_skipping`
+     leaves out children or their properties the kind keys another way
+     (ticket 0011). The built-in recipe registry holds the `command`
+     recipe (§3).
    - **Config declares assets** at the top level, optionally inside
      `group "<name>"`:
      `asset "<name>" recipe="<kind>" { input "<label>" "<asset>"; … }`.

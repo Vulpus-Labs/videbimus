@@ -1,0 +1,11 @@
+// This machine's paths and the render settings: copy to local.kdl.
+let blender="/Applications/Blender.app/Contents/MacOS/Blender" \
+    scene-script="/path/to/song/hwscene.py" \
+    panel="/path/to/song/out/hw/s14/panel.mp4" \
+    controls="/path/to/song/out/hw/s14/controls.json" \
+    camera="/path/to/song/out/hw/s14/camera.json" \
+    from=(f)1 \
+    to=(f)279 \
+    samples=24 \
+    width=1920 \
+    height=1080

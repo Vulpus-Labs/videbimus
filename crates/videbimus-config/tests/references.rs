@@ -148,3 +148,33 @@ fn reference_errors() {
     let e = err("shot \"a\" v=\"$self.\"");
     assert!(e.contains("`$self.` isn't a valid reference"), "{e}");
 }
+
+#[test]
+fn run_time_references_are_kept_as_written() {
+    let c = ok(
+        "let outer=1\nrun \"r\" \"$out\" \"$in.shot/panel.mp4\" \"$chunk.start\" \"$$out\" \"$$x\" a=$outer",
+    );
+    let r = node(&c, "r");
+    let args: Vec<String> = c.resolver().args(r).unwrap();
+    assert_eq!(
+        args,
+        [
+            "r",
+            "$out",
+            "$in.shot/panel.mp4",
+            "$chunk.start",
+            "$$out",
+            "$x"
+        ],
+        "`$$` before a run-time name is the recipe's escape"
+    );
+    assert!(
+        (num(&c, r, "a") - 1.0).abs() < f64::EPSILON,
+        "$outer is a let"
+    );
+
+    let e = err("let out=1");
+    assert!(e.contains("`out` can't be bound"), "{e}");
+    let e = err("x \"a\" v=\"$outdir\"");
+    assert!(e.contains("nothing called `$outdir`"), "{e}");
+}

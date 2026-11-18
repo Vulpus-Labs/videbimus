@@ -1,0 +1,40 @@
+// Fenland's s14 hardware shot, rendered by Blender through the `command`
+// recipe (ADR 0009 §3). Nothing here is Rust: run it with the stock
+// binary, `videbimus --config video.kdl build`.
+//
+// The paths are this machine's, so they live in local.kdl, which isn't
+// committed: copy local.kdl.example to local.kdl and fill it in (see
+// README.md).
+
+include "local.kdl"
+
+video rate=30
+
+group "s14" {
+    // The shot's inputs, copied into the store: hashed as sources, so
+    // editing one rebuilds the shot, and nothing else.
+    asset "shot" recipe="command" {
+        source $panel name="panel"
+        source $controls name="controls"
+        source $camera name="camera"
+        run "cp" "$source.panel" "$source.controls" "$source.camera" "$out"
+        output file="panel.mp4"
+        output file="controls.json"
+        output file="camera.json"
+        cost per-run=1
+    }
+
+    // hwscene.py renders frames --start..--end (1-based, inclusive) of the
+    // shot into its output directory as NNNN.png.
+    asset "blender" recipe="command" {
+        input "shot" "s14/shot"
+        tool "blender" path=$blender version-from="blender --version" version-match="Blender ([0-9][0-9.]*)"
+        script $scene-script name="scene"
+        env PHYS=1
+        run "blender" "-b" "-t" "$cores" "-P" "$script.scene" "--" "$in.shot" "$out" \
+            "--start" "$chunk.start" "--end" "$chunk.last" \
+            "--samples" $samples "--res" $width $height
+        output frames="####.png" from=$from to=$to chunk=4
+        cost per-frame=20 cores=4 mem="3G" gpu=#true remote=#true
+    }
+}

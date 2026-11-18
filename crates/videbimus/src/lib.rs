@@ -38,13 +38,17 @@
 
 pub mod app;
 pub mod cli;
+pub mod command;
 pub mod project;
 pub mod recipe;
 
 pub use app::App;
 pub use cli::Console;
 pub use project::{Asset, Project};
-pub use recipe::{KeyStart, RecipeContext, RecipeKind, RecipeRegistry, canonical_config};
+pub use recipe::{
+    KeyStart, RecipeContext, RecipeKind, RecipeRegistry, canonical_config,
+    canonical_config_skipping,
+};
 
 pub use videbimus_config as config;
 pub use videbimus_core as core;

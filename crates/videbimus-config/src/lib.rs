@@ -21,6 +21,12 @@
 //!   previous sibling), and paths through them: `$parent.parent.key`,
 //!   `$prev.camera.end` (a child of a resolved node, by kind or by name).
 //!   Write `$$` for a string that starts with a literal `$`.
+//! - **Run-time references**: a string starting with `$in`, `$out`,
+//!   `$chunk`, `$cores`, `$script` or `$source` ([`RUN_TIME`]) is kept as
+//!   written, for the recipe that runs a command to fill in when it runs
+//!   (`run "blender" "$in.shot" "$out"`), and so is one starting with
+//!   `$$` and one of them (the recipe's own escape: `"$$out"` is a
+//!   literal `$out` there). Those names can't be bound with `let`.
 //! - **Expressions**: `(expr)"$self.length + 0.5s"`, with `+ - * /` (or
 //!   `− × ÷`), parentheses, `min`, `max`, `clamp` and `frames`; see
 //!   [ADR 0005] for the unit rules. A `-` inside a name (`$beats-per-bar`)
@@ -69,6 +75,12 @@ pub use value::{NoTempo, Time, Timebase, Unit, Value};
 
 use expand::RawNode;
 use resolve::Resolving;
+
+/// Reference names the config leaves as written, for a recipe to
+/// substitute when it runs (ADR 0005 §2, ADR 0009 §3): a string that
+/// starts with `$` (or `$$`) and one of these, then anything but a
+/// letter, digit, `_` or `-`, is a plain string, kept as written.
+pub const RUN_TIME: [&str; 6] = ["in", "out", "chunk", "cores", "script", "source"];
 
 /// A resolved config: its top-level nodes, and the [`Resolver`] to read
 /// them with.

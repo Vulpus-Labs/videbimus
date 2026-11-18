@@ -422,6 +422,17 @@ impl Expander<'_> {
         for e in node.entries() {
             let name = e.name().map(|n| n.value().to_owned()).unwrap_or_default();
             let entry = convert_entry(e, file, via)?;
+            if crate::RUN_TIME.contains(&name.as_str()) {
+                return Err(Error::new(format!(
+                    "`{name}` can't be bound: `${name}` is filled in when a command runs"
+                ))
+                .at(entry.origin)
+                .element(format!("let {name}"))
+                .help(format!(
+                    "choose another name; {} are reserved",
+                    crate::RUN_TIME.map(|n| format!("${n}")).join(", ")
+                )));
+            }
             if let Some(prev) = self.scopes[scope].bindings.iter().find(|b| b.name == name) {
                 return Err(
                     Error::new(format!("`{name}` is bound twice in the same block"))
@@ -758,6 +769,19 @@ fn content_offset(file: &SourceFile, entry: &KdlEntry, s: &str) -> Option<usize>
     (text.get(i..i + s.len()) == Some(s)).then_some(span.offset() + i)
 }
 
+/// Whether `s` starts with a run-time reference ([`crate::RUN_TIME`]),
+/// or an escaped one: `$out`, `$in.shot/panel.mp4`, `$$out`, but not
+/// `$outer`.
+fn is_run_time(s: &str) -> bool {
+    let Some(rest) = s.strip_prefix("$$").or_else(|| s.strip_prefix('$')) else {
+        return false;
+    };
+    let head_len = rest
+        .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '-'))
+        .unwrap_or(rest.len());
+    crate::RUN_TIME.contains(&&rest[..head_len])
+}
+
 /// A KDL entry's value, typed: units, `(expr)` and `$` references.
 #[allow(clippy::many_single_char_names)]
 pub(crate) fn convert_entry(
@@ -778,6 +802,7 @@ pub(crate) fn convert_entry(
     };
     let ty = e.ty().map(kdl::KdlIdentifier::value);
     let value = match (ty, e.value()) {
+        (None, KdlValue::String(s)) if is_run_time(s) => RawValue::Lit(Value::String(s.clone())),
         (None, KdlValue::String(s)) if s.starts_with("$$") => {
             RawValue::Lit(Value::String(s[1..].to_owned()))
         }
