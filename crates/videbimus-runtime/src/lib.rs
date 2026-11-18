@@ -38,6 +38,11 @@
 //! [ADR 0002]: ../../../adrs/0002-scene-components.md
 //! [ADR 0009]: ../../../adrs/0009-using-videbimus.md
 
+/// The built-in kinds' code identities, from `build.rs`.
+mod code {
+    include!(concat!(env!("OUT_DIR"), "/videbimus_code.rs"));
+}
+
 pub mod color;
 pub mod curve;
 pub mod drive;
@@ -46,7 +51,10 @@ pub mod raster;
 pub mod registry;
 
 pub use drive::{Child, DriveOptions, DriveStats, Scene};
-pub use registry::{Builder, ComponentKind, ComponentRegistry, Constructor};
+pub use registry::{
+    AssetRead, AssetReads, Builder, CodeIdentity, ComponentKind, ComponentRegistry, Constructor,
+    ReadBy,
+};
 
 use videbimus_config::{Config, Error, Node};
 
@@ -66,6 +74,22 @@ pub fn scene_from_config(
     options: DriveOptions,
     window: usize,
 ) -> Result<Scene, Error> {
+    scene_from_config_with(config, root, registry.builder(options), window)
+}
+
+/// As [`scene_from_config`], building the tree with `builder` (from
+/// [`ComponentRegistry::builder_reading`], say, to record the assets it
+/// reads).
+///
+/// # Errors
+///
+/// As [`scene_from_config`].
+pub fn scene_from_config_with(
+    config: &Config,
+    root: &Node,
+    builder: Builder,
+    window: usize,
+) -> Result<Scene, Error> {
     let r = config.resolver();
     let (Some(video), Some(tb)) = (config.nodes_of("video").next(), config.timebase()) else {
         return Err(Error::new("the config has no `video` node")
@@ -75,8 +99,13 @@ pub fn scene_from_config(
     };
     let width: u32 = r.get(video, "width")?;
     let height: u32 = r.get(video, "height")?;
-    let component = registry.builder(options).build(root, r)?;
+    let component = builder.build(root, r)?;
     Ok(Scene::new(
-        component, tb.rate, width, height, options, window,
+        component,
+        tb.rate,
+        width,
+        height,
+        builder.options(),
+        window,
     ))
 }

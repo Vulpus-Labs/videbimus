@@ -1,0 +1,17 @@
+[package]
+name = "videbimus-build"
+description = "videbimus's build-script helper: per-kind code identity from declared source files (ADR 0009 §5)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+blake3 = "1"
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints]
+workspace = true

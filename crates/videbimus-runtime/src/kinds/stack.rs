@@ -108,6 +108,7 @@ impl Component for Stack {
 
 impl ComponentKind for Stack {
     const KIND: &'static str = "stack";
+    const CODE: &'static str = crate::code::STACK;
 
     fn from_config(node: &Node, r: &Resolver, b: &Builder) -> Result<Box<dyn Component>, Error> {
         b.check_props(node, r, &[])?;
@@ -164,6 +165,7 @@ pub struct Crossfade;
 
 impl ComponentKind for Crossfade {
     const KIND: &'static str = "crossfade";
+    const CODE: &'static str = crate::code::CROSSFADE;
 
     fn from_config(node: &Node, r: &Resolver, b: &Builder) -> Result<Box<dyn Component>, Error> {
         b.check_props(node, r, &["overlap", "ease"])?;

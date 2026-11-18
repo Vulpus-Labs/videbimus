@@ -1,0 +1,24 @@
+[package]
+name = "videbimus"
+description = "videbimus: a build system for rendered video. The library projects depend on (App, kind registration), and the stock binary"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+videbimus-core = { version = "0.1.0", path = "../videbimus-core" }
+videbimus-config = { version = "0.1.0", path = "../videbimus-config" }
+videbimus-store = { version = "0.1.0", path = "../videbimus-store" }
+videbimus-scheduler = { version = "0.1.0", path = "../videbimus-scheduler" }
+videbimus-runtime = { version = "0.1.0", path = "../videbimus-runtime" }
+serde_json = "1"
+libc = "0.2"
+
+[dev-dependencies]
+tempfile = "3"
+videbimus-build = { version = "0.1.0", path = "../videbimus-build" }
+
+[lints]
+workspace = true

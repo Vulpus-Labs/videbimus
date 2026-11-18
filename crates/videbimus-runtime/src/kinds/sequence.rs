@@ -74,6 +74,7 @@ impl Component for Sequence {
 
 impl ComponentKind for Sequence {
     const KIND: &'static str = "sequence";
+    const CODE: &'static str = crate::code::SEQUENCE;
 
     fn from_config(node: &Node, r: &Resolver, b: &Builder) -> Result<Box<dyn Component>, Error> {
         b.check_props(node, r, &[])?;

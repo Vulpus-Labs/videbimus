@@ -76,7 +76,65 @@ All three are costly, or fragile, for per-frame components.
    before anything runs, and names the binary that has it (from a `binary`
    hint in the config): "kind `fen` isn't registered; this config needs
    the `fenland` binary (`cargo run -p fenland --`)".
-7. **Projects stay outside videbimus.** A project crate depends on `videbimus` and
+7. **How it landed** (ticket 0010; crates `videbimus` and
+   `videbimus-build`):
+   - **Recipe kinds** return a scheduler `Task` from
+     `from_config(&Node, &Resolver, &RecipeContext)`. The project owns
+     the task's name (it replaces whatever the task reports) and puts the
+     kind's code identity into every key the task makes.
+     `RecipeContext::key` starts a key with the kind, its code identity
+     and the node's canonical config (properties sorted, times as
+     seconds; the name, `recipe` and `input`s left out, since they are
+     keyed as the kind and the inputs). The built-in recipe registry is
+     empty until the `command` recipe (ticket 0011).
+   - **Config declares assets** at the top level, optionally inside
+     `group "<name>"`:
+     `asset "<name>" recipe="<kind>" { input "<label>" "<asset>"; … }`.
+     The rest of the node is the kind's. Inputs become graph edges,
+     keyed under their labels.
+   - **Asset names** are the group path, then the asset's own name,
+     which defaults to its recipe kind (its role):
+     `group "s07" { asset recipe="blender" }` is `s07/blender`. Names
+     are unique.
+   - **Components reference assets by name.** A kind that reads an
+     asset by name records it while the tree is built
+     (`Builder::read_asset`, with the video frames it shows it over and
+     the asset frame at the start). A frame player's `asset="…"` must
+     name a declared asset; its `store=… name=…` is wired the same way
+     when the store is the project's and the name is declared. Building
+     the scene builds exactly the assets it reads; a preview builds only
+     the asset frames its video frames show (`Target::frames`). A frame
+     player's `dir` or `key` is unmanaged: read as it is, never built.
+     `Component::needs` (by key) can't drive the graph, since keys are
+     only known once inputs are built (ADR 0003 §4); it stays for kinds
+     that read a fixed key.
+   - **The root** is the top-level component `video`'s `root="…"` names,
+     or else the only top-level node that isn't `video`, `requires`,
+     `binary`, `store`, `asset` or `group`. Several and no `root` is an
+     error naming them; none is a project of assets only.
+   - **The store** is `store "<dir>"` (relative to the config file),
+     else `.videbimus/store` beside the config; `--store` overrides.
+   - **`binary "<name>" run="<command>"`**: `run` is optional. A missing
+     kind's error is located at the `requires` argument, and notes which
+     binary is running.
+   - **Code identity**: `ComponentKind` and `RecipeKind` have
+     `CODE` and `VERSION` constants, both empty by default; together they
+     are the kind's `CodeIdentity`, hashed as the key's code input.
+     `videbimus_build::Kinds` in a build script hashes each kind's
+     declared files and directories (relative paths and contents) into
+     `$OUT_DIR/videbimus_code.rs`, one constant per kind, included with
+     `videbimus::include_code!()`. The built-in component kinds declare
+     their own module plus the shared picture modules.
+   - **The CLI**: `build [targets…] [--profile P]` builds what the scene
+     reads (or named assets or groups; with no scene, every asset), with
+     a plain line per scheduler event and Ctrl-C as a graceful stop;
+     `preview <frames>` builds what those frames need and writes them as
+     PNG; `status` lists each asset's latest build (the live view is
+     ticket 0005); `stop` sends Ctrl-C to the build holding the store's
+     lock on this machine; `review` waits for ticket 0007. Exit codes: 0,
+     1 failed, 2 usage, 130 stopped.
+
+8. **Projects stay outside videbimus.** A project crate depends on `videbimus` and
    keeps its configs alongside. Fenland is such a crate, outside videbimus's
    repository. Its silkscreen-specific kinds live there, never in videbimus.
 

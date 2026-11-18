@@ -250,6 +250,7 @@ impl Component for Filter {
 
 impl ComponentKind for Filter {
     const KIND: &'static str = "filter";
+    const CODE: &'static str = crate::code::FILTER;
 
     fn from_config(node: &Node, r: &Resolver, b: &Builder) -> Result<Box<dyn Component>, Error> {
         b.check_props(node, r, &[])?;

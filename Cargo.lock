@@ -417,6 +417,29 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7dd6e30e90baa6f72411720665d41d89b9a3d039dc45b8faea1ddd07f617f6af"
 
 [[package]]
+name = "videbimus"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "serde_json",
+ "tempfile",
+ "videbimus-build",
+ "videbimus-config",
+ "videbimus-core",
+ "videbimus-runtime",
+ "videbimus-scheduler",
+ "videbimus-store",
+]
+
+[[package]]
+name = "videbimus-build"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "tempfile",
+]
+
+[[package]]
 name = "videbimus-config"
 version = "0.1.0"
 dependencies = [
@@ -436,6 +459,7 @@ dependencies = [
  "fontdue",
  "png",
  "tempfile",
+ "videbimus-build",
  "videbimus-config",
  "videbimus-core",
  "videbimus-store",

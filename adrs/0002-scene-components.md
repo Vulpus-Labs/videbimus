@@ -88,6 +88,13 @@ didn't jump when it came back.
    - **Pixels.** Images are premultiplied linear `f32`; PNG input is
      sRGB, decoded and premultiplied on load. A frame player shows a
      labelled placeholder for a frame it can't find or read.
+   - **Assets by name** (ticket 0010). `needs` returns keys, which can't
+     be known before a lazily keyed input is built. Kinds that read
+     assets by name record each read through the builder instead
+     (`Builder::read_asset`): the name, and which asset frames it shows
+     over which video frames. The project turns those reads into
+     scheduler targets (ADR 0009 §7). A frame player reads
+     `asset="s07/blender"` from the project's store.
 
 ## Consequences
 

@@ -161,6 +161,7 @@ impl Component for Caption {
 
 impl ComponentKind for Caption {
     const KIND: &'static str = "caption";
+    const CODE: &'static str = crate::code::CAPTION;
 
     #[allow(clippy::cast_possible_truncation)]
     fn from_config(node: &Node, r: &Resolver, b: &Builder) -> Result<Box<dyn Component>, Error> {

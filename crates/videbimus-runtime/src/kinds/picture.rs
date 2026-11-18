@@ -62,6 +62,7 @@ impl Component for Picture {
 
 impl ComponentKind for Picture {
     const KIND: &'static str = "image";
+    const CODE: &'static str = crate::code::IMAGE;
 
     fn from_config(node: &Node, r: &Resolver, b: &Builder) -> Result<Box<dyn Component>, Error> {
         let mut own = vec!["path"];

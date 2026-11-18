@@ -9,7 +9,7 @@ use videbimus_store::{ChunkRecord, Store, parse_key};
 use super::{PLACEMENT_PICTURE_PROPS, no_children, read_placement};
 use crate::color::read_png;
 use crate::raster::{Placement, draw, placeholder};
-use crate::registry::{Builder, ComponentKind, path_prop};
+use crate::registry::{AssetRead, Builder, ComponentKind, ReadBy, path_prop};
 
 /// Where a frame player's files come from.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -43,11 +43,19 @@ enum Found {
 /// ```kdl
 /// frame-player "s07" from=(bar)4 to=(bar)8 dir="frames/s07" \
 ///     pattern="####.png" start-index=1 fit="cover"
+/// frame-player "s07" asset="s07/blender" start-index=0
 /// frame-player "s08" store="../store" name="s08/blender" pattern="####.png"
 /// ```
 ///
-/// - `dir`: a directory of frames, relative to the config file; or
-/// - `store` with `key` (64 hex digits) or `name`: a frame-sequence asset.
+/// - `asset`: a frame-sequence asset the project declares, by name. It is
+///   read from the project's store, and building the scene builds it
+///   (the frames shown, for a preview). The usual way.
+/// - `dir`: a directory of frames, relative to the config file. Not
+///   managed: nothing builds it, and editing its files rebuilds nothing.
+/// - `store` with `key` (64 hex digits) or `name`: an asset in a given
+///   store. A `name` in the project's store that the project declares is
+///   built like `asset`; otherwise, and always for a `key`, the asset is
+///   read as it is.
 /// - `pattern`: the file name, with a run of `#` for the zero-padded
 ///   frame number (default `"####.png"`).
 /// - `start-index`: the file number of local frame 0 (default 0).
@@ -134,6 +142,106 @@ impl FramePlayer {
     }
 }
 
+/// Where a frame player's frames come from, recording asset reads with
+/// `b`.
+fn read_source(
+    node: &Node,
+    r: &Resolver,
+    b: &Builder,
+    interval: Interval,
+    start_index: i64,
+) -> Result<FrameSource, Error> {
+    let at = |k: &str| crate::registry::origin_of(node, k);
+    let read = |name: &str, by: ReadBy, store: &std::path::Path, key: &str| AssetRead {
+        name: name.to_owned(),
+        by,
+        store: store.to_owned(),
+        origin: at(key),
+        video: b.absolute(interval),
+        first: start_index,
+    };
+    let asset: Option<String> = r.opt(node, "asset")?;
+    let source = match (
+        asset,
+        path_prop(node, r, "dir")?,
+        path_prop(node, r, "store")?,
+    ) {
+        (Some(asset), dir, store) => {
+            if dir.is_some() {
+                return Err(r
+                    .error(node, &at("dir"), "both `asset` and `dir` are given")
+                    .help("play from one: an asset the project declares, or a directory"));
+            }
+            for k in ["key", "name"] {
+                if node.prop(k).is_some() {
+                    return Err(r
+                        .error(node, &at(k), format!("both `asset` and `{k}` are given"))
+                        .help("`asset` names the asset already; drop this"));
+                }
+            }
+            let Some(root) = store.or_else(|| b.store().map(Into::into)) else {
+                return Err(r
+                    .error(
+                        node,
+                        &at("asset"),
+                        "`asset` reads the project's store, and there is none here",
+                    )
+                    .help("build the scene with a videbimus binary, or add store=\"…\""));
+            };
+            b.read_asset(read(&asset, ReadBy::Asset, &root, "asset"));
+            FrameSource::Store {
+                root,
+                key: None,
+                name: Some(asset),
+            }
+        }
+        (None, Some(_), Some(_)) => {
+            return Err(r
+                .error(node, &at("store"), "both `dir` and `store` are given")
+                .help("play from one: a directory, or an asset in a store"));
+        }
+        (None, Some(dir), None) => {
+            for k in ["key", "name"] {
+                if node.prop(k).is_some() {
+                    return Err(r
+                        .error(
+                            node,
+                            &at(k),
+                            format!("`{k}` names an asset in a store, but this plays a directory"),
+                        )
+                        .help("drop it, or replace `dir` with store=…"));
+                }
+            }
+            FrameSource::Dir(dir)
+        }
+        (None, None, Some(root)) => {
+            let key = match r.opt::<String>(node, "key")? {
+                None => None,
+                Some(s) => Some(parse_key(&s).ok_or_else(|| {
+                    r.error(node, &at("key"), format!("`{s}` isn't an asset key"))
+                        .help("an asset key is 64 hex digits")
+                })?),
+            };
+            let name: Option<String> = r.opt(node, "name")?;
+            if key.is_none() && name.is_none() {
+                return Err(r
+                    .error(node, node.origin(), "it names a store but no asset in it")
+                    .help("add key=\"<64 hex digits>\" or name=\"<asset name>\""));
+            }
+            if let (None, Some(n)) = (key, &name) {
+                b.read_asset(read(n, ReadBy::Name, &root, "name"));
+            }
+            FrameSource::Store { root, key, name }
+        }
+        (None, None, None) => {
+            return Err(r.error(node, node.origin(), "it has nothing to play").help(
+                "add asset=\"<asset name>\", dir=\"frames/…\", or store=… with key=… or name=…",
+            ));
+        }
+    };
+    Ok(source)
+}
+
 fn split_pattern(p: &str) -> Option<(String, usize, String)> {
     let start = p.find('#')?;
     let width = p[start..].chars().take_while(|&c| c == '#').count();
@@ -169,58 +277,25 @@ impl Component for FramePlayer {
 
 impl ComponentKind for FramePlayer {
     const KIND: &'static str = "frame-player";
+    const CODE: &'static str = crate::code::FRAME_PLAYER;
 
     fn from_config(node: &Node, r: &Resolver, b: &Builder) -> Result<Box<dyn Component>, Error> {
-        let mut own = vec!["dir", "store", "key", "name", "pattern", "start-index"];
+        let mut own = vec![
+            "asset",
+            "dir",
+            "store",
+            "key",
+            "name",
+            "pattern",
+            "start-index",
+        ];
         own.extend(PLACEMENT_PICTURE_PROPS);
         b.check_props(node, r, &own)?;
         no_children(node, r)?;
         let interval = b.interval(node, r)?;
+        let start_index: i64 = r.opt(node, "start-index")?.unwrap_or(0);
+        let source = read_source(node, r, b, interval, start_index)?;
         let at = |k: &str| crate::registry::origin_of(node, k);
-        let source = match (path_prop(node, r, "dir")?, path_prop(node, r, "store")?) {
-            (Some(_), Some(_)) => {
-                return Err(r
-                    .error(node, &at("store"), "both `dir` and `store` are given")
-                    .help("play from one: a directory, or an asset in a store"));
-            }
-            (Some(dir), None) => {
-                for k in ["key", "name"] {
-                    if node.prop(k).is_some() {
-                        return Err(r
-                            .error(
-                                node,
-                                &at(k),
-                                format!(
-                                    "`{k}` names an asset in a store, but this plays a directory"
-                                ),
-                            )
-                            .help("drop it, or replace `dir` with store=…"));
-                    }
-                }
-                FrameSource::Dir(dir)
-            }
-            (None, Some(root)) => {
-                let key = match r.opt::<String>(node, "key")? {
-                    None => None,
-                    Some(s) => Some(parse_key(&s).ok_or_else(|| {
-                        r.error(node, &at("key"), format!("`{s}` isn't an asset key"))
-                            .help("an asset key is 64 hex digits")
-                    })?),
-                };
-                let name: Option<String> = r.opt(node, "name")?;
-                if key.is_none() && name.is_none() {
-                    return Err(r
-                        .error(node, node.origin(), "it names a store but no asset in it")
-                        .help("add key=\"<64 hex digits>\" or name=\"<asset name>\""));
-                }
-                FrameSource::Store { root, key, name }
-            }
-            (None, None) => {
-                return Err(r
-                    .error(node, node.origin(), "it has nothing to play")
-                    .help("add dir=\"frames/…\", or store=… with key=… or name=…"));
-            }
-        };
         let pattern = r
             .opt::<String>(node, "pattern")?
             .unwrap_or_else(|| "####.png".into());
@@ -233,7 +308,6 @@ impl ComponentKind for FramePlayer {
                 )
                 .help("mark it with #, one per digit: \"####.png\" is 0001.png"));
         }
-        let start_index: i64 = r.opt(node, "start-index")?.unwrap_or(0);
         Ok(Box::new(Self::new(
             interval,
             source,

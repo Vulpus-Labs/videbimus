@@ -38,7 +38,9 @@ rebuild everything for any mix tweak.
    output, a manifest (inputs, tool versions, timings, peak memory,
    machine), and the build log (ADR 0007). Each asset also has a name, its
    stable slot in the scene (`s07/blender`); the store keeps each name's
-   keys, newest first. Garbage collection keeps what the current config
+   keys, newest first. The project assigns names: the group path the
+   asset is declared in, then its own name, by default its recipe kind
+   (ADR 0009 §7). Garbage collection keeps what the current config
    reaches, plus each name's last N generations that it no longer reaches.
 7. **Every rebuild says why.** Keys hash labelled inputs, and the
    manifest keeps them; a new key is diffed against its name's previous
