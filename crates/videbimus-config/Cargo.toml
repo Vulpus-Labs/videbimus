@@ -1,0 +1,16 @@
+[package]
+name = "videbimus-config"
+description = "videbimus's config resolver: KDL v2 with units, references, arithmetic, templates, includes and located errors"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+kdl = { version = "6.7", default-features = false, features = ["span"] }
+miette = { version = "7.6", default-features = false }
+videbimus-core = { version = "0.1.0", path = "../videbimus-core" }
+
+[lints]
+workspace = true

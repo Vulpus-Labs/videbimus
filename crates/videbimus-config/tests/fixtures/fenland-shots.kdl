@@ -1,0 +1,128 @@
+// Fenland's close-ups: the FACE list of the video's original Python shot
+// list (shots.py), written as videbimus config. Each shot renders one
+// synth's faceplate between two bars, with a camera that moves between two
+// keys.
+
+video rate=30 {
+    tempo bpm=104 beats-per-bar=4
+}
+
+// Rendered past each shot's end, for the dissolve.
+let tail=(s)0.5
+
+// A close-up: full HD. `shot-frames` is the shot's length rounded to whole
+// frames as one duration, as shots.py's `main - 1` is; the camera keys are
+// timed over the shot proper, and the tail holds the last pose.
+template "face" width=1920 height=1080 shot-frames=(expr)"frames($self.to - $self.from)"
+
+// A camera key. `u` runs from 0 (the shot's start) to 1 (its end); `t` is
+// the same moment as a fraction of the render, tail included.
+template "key" t=(expr)"$self.u * $parent.shot-frames / ($parent.shot-frames + frames($tail))" azim=0 lens=50 z=0.1
+
+// Looking straight down at the faceplate, stopped down to keep it sharp.
+template "top" use="key" elev=90 fstop=11
+
+// Looking across it, wide open for a shallow focus.
+template "oblique" use="key" fstop=2.8
+
+// Faceplate tabs: which page, and where to click for it.
+template "v1-l1" page="0:0" click="720,61"
+template "v1-fx" page="0:2" click="908,61"
+template "kr-delay" page="0:1" click="528,278"
+
+shot "s02" use="face" from=(bar)4 to=(bar)8 inst="pad" {
+    tab use="v1-l1"
+    key use="top" u=0 x=530 y=300 view=1180
+    key use="top" u=1 x=845 y=165 view=400
+    captions "L1 Cutoff"
+}
+
+shot "s03" use="face" from=(bar)8 to=(bar)12 inst="keys" {
+    key use="oblique" u=0 x=110 y=490 view=400 elev=34 azim=-28 lens=60
+    key use="oblique" u=1 x=320 y=488 view=380 elev=40 azim=18 lens=60
+    captions "Filter Cutoff"
+}
+
+shot "s04" use="face" from=(bar)12 to=(bar)16 inst="bass" {
+    key use="top" u=0 x=300 y=150 view=430
+    key use="top" u=1 x=430 y=158 view=360
+    captions "Low Pass"
+}
+
+shot "s05" use="face" from=(bar)16 to=(bar)20 inst="bass" {
+    key use="oblique" u=0 x=368 y=150 view=250 elev=36 azim=-38 lens=70 fstop=2.0
+    key use="oblique" u=1 x=395 y=158 view=230 elev=42 azim=12 lens=70 fstop=2.0
+    captions "Low Pass"
+}
+
+shot "s07" use="face" from=(bar)24 to=(bar)28 inst="arp" {
+    tab use="v1-l1"
+    key use="oblique" u=0 x=745 y=505 view=470 elev=42 azim=18 lens=55
+    key use="oblique" u=1 x=845 y=170 view=420 elev=50 azim=-12 lens=55
+    captions "L1 Cutoff"
+}
+
+shot "s09" use="face" from=(bar)32 to=(bar)36 inst="keys" {
+    key use="top" u=0 x=560 y=275 view=1200
+    key use="top" u=1 x=225 y=490 view=470
+    captions "Filter Cutoff"
+}
+
+shot "s10" use="face" from=(bar)36 to=(bar)40 inst="lead" {
+    key use="oblique" u=0 x=612 y=150 view=300 elev=36 azim=25 lens=60
+    key use="oblique" u=1 x=372 y=150 view=300 elev=34 azim=-16 lens=60
+    captions "Vibrato Depth" "Low Pass"
+}
+
+shot "s11" use="face" from=(bar)40 to=(bar)44 inst="keys" {
+    key use="oblique" u=0 x=215 y=185 view=520 elev=50 azim=-30 lens=50
+    key use="oblique" u=1 x=330 y=190 view=450 elev=40 azim=20 lens=50
+    captions "Filter Cutoff"
+}
+
+shot "s12" use="face" from=(bar)44 to=(bar)48 inst="pad" {
+    tab use="v1-l1"
+    key use="top" u=0 x=845 y=160 view=420
+    key use="top" u=1 x=760 y=440 view=420
+    captions "L1 Cutoff" "L1 Slot 2 Depth"
+}
+
+shot "s13" use="face" from=(bar)48 to=(bar)52 inst="pad" {
+    tab use="v1-l1"
+    key use="oblique" u=0 x=800 y=168 view=300 elev=32 azim=-30 lens=70 fstop=2.0
+    key use="oblique" u=1 x=880 y=168 view=260 elev=38 azim=22 lens=70 fstop=2.0
+    captions "L1 Cutoff"
+}
+
+shot "s14" use="face" from=(bar)52 to=(bar)56 inst="lead" {
+    tab use="kr-delay"
+    key use="top" u=0 x=498 y=340 view=380
+    key use="oblique" u=1 x=560 y=350 view=300 elev=45 azim=15 lens=55
+    captions "Delay Mix" "Vibrato Depth"
+}
+
+shot "s16" use="face" from=(bar)60 to=(bar)64 inst="arp" {
+    tab use="v1-l1"
+    key use="top" u=0 x=530 y=300 view=1180
+    key use="top" u=1 x=880 y=165 view=330
+    captions "L1 Cutoff" "L1 Resonance"
+}
+
+shot "s18" use="face" from=(bar)68 to=(bar)72 inst="glass" {
+    key use="oblique" u=0 x=115 y=180 view=330 elev=45 azim=-22 lens=55
+    key use="oblique" u=1 x=225 y=490 view=400 elev=40 azim=15 lens=55
+    captions "Filter Cutoff"
+}
+
+shot "s19" use="face" from=(bar)72 to=(bar)76 inst="keys" {
+    key use="top" u=0 x=225 y=490 view=420
+    key use="top" u=1 x=560 y=273 view=1240
+    captions "Filter Cutoff" "Delay FB"
+}
+
+shot "s20" use="face" from=(bar)76 to=(bar)80 inst="pad" {
+    tab use="v1-fx"
+    key use="top" u=0 x=530 y=330 view=1180
+    key use="top" u=1 x=916 y=458 view=330
+    captions "Reverb Mix"
+}

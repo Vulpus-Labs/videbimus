@@ -30,8 +30,10 @@ Fenland's shot list (`shots.py`) needed more than literal values:
    - **References:** `$name` refers to a defined value. A component may
      refer to its own resolved fields (`$self.start`, `$self.length`) and
      its parent's.
-   - **Arithmetic:** `(=)"$self.length + 0.5s"`: `+ − × ÷`, min, max and
-     clamp over typed quantities, with unit checking.
+   - **Arithmetic:** `(expr)"$self.length + 0.5s"`: `+ − × ÷`, min, max and
+     clamp over typed quantities, with unit checking. (First written
+     `(=)"…"`, which KDL v2 rejects: a type annotation is an identifier,
+     and `=` can't appear in one. See §6.)
    - **Templates:** `template "close-up" { … }`, then `shot "s02"
      use="close-up" { … }` overrides fields. Templates nest.
    - **Includes:** `include "shots.kdl"`.
@@ -48,6 +50,39 @@ Fenland's shot list (`shots.py`) needed more than literal values:
 5. **Errors point at the source.** Every resolved value remembers its file,
    line and template chain, so an error says where the bad value came from
    and what was expected.
+
+6. **The resolver's rules** (ticket 0002, `videbimus-config`):
+   - **Timebase.** One top-level `video rate=30 { tempo bpm=104
+     beats-per-bar=4 }`; `rate="30000/1001"` for fractional rates. It is
+     resolved first; the tempo is optional if no time is in bars or beats.
+     `video` stays in the tree for its other properties.
+   - **Times.** A time is an amount of one unit, counted from the start
+     (bar 0, 0 s, frame 0). Positions and durations share the type: with
+     one constant tempo they convert to frames identically, and nothing
+     is rounded before the final conversion, so each boundary still snaps
+     once from its own position (ADR 0001 §4). A tempo map would need the
+     two told apart.
+   - **Unit rules.** time ± time converts the right operand into the
+     left's unit, exactly; time × number and time ÷ number keep the unit;
+     time ÷ time is a plain number; time ± number, time × time and
+     number ÷ time are errors. min, max and clamp take all times or all
+     numbers. `frames(t)` is the nearest whole frame to `t`, as `(f)`:
+     the one rounding an expression can ask for, for formulas that round
+     a length (Fenland's camera timing does).
+   - **References** resolve lazily in document order. `$name` is a `let`
+     or `each` binding, from the innermost block out. Paths start at
+     `$self`, `$parent` or `$prev`, may step through `parent` and `prev`,
+     and may enter the children of a resolved node (an earlier sibling,
+     by kind or name), never of one still resolving. `$$` escapes a
+     literal `$`.
+   - **`let name=value`** binds in its block and the blocks inside it.
+   - **Templates** are defined at the top level of a file (includes
+     count). The using node's properties win; a child with the same kind
+     and name as a template child merges into it; other children follow.
+     Template values resolve where the template is used.
+   - **`include "f.kdl"`** is relative to the including file and splices
+     in place. **`each "x" a b c index="i" { … }`** repeats its body per
+     literal item.
 
 ## What would break it
 
