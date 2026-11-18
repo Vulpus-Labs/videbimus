@@ -1,0 +1,11 @@
+[package]
+name = "videbimus-core"
+description = "videbimus's time base and component contract: frames, rates, intervals, tempo, catch-up planning"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
