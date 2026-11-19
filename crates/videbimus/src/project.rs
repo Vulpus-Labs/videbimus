@@ -145,8 +145,12 @@ impl Project {
     /// The first problem, located: a config error, a missing kind, a bad
     /// asset declaration or reference, or a scene that won't build.
     pub fn load(app: &App, path: &Path, store: Option<&Path>) -> Result<Self, Error> {
-        let config = Config::load(path)?;
-        Self::from_config(app, config, path, store)
+        // Absolute from the start, so every location derived from the
+        // config (a command's working directory, its scripts, the store)
+        // is absolute too: `video.kdl` alone has an empty parent.
+        let path = std::path::absolute(path).unwrap_or_else(|_| path.to_owned());
+        let config = Config::load(&path)?;
+        Self::from_config(app, config, &path, store)
     }
 
     /// As [`load`](Self::load), from a config already read.

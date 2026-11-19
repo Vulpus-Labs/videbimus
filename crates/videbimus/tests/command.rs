@@ -597,3 +597,39 @@ fn fenland_blender_shot() {
         }
     }
 }
+
+// ---- a bare --config file name (found by the fenland project, 0008)
+
+#[test]
+fn a_bare_config_name_runs_commands_in_its_directory() {
+    let d = Dir::new(
+        r#"
+video rate=30
+asset "here" recipe="command" {
+    run "sh" "-c" "pwd -P > \"$1/cwd.txt\"" "sh" "$out"
+    script "tool.sh"
+    output file="cwd.txt"
+}
+"#,
+    );
+    d.write("tool.sh", "true\n");
+    // run from the project directory with `--config video.kdl`, whose
+    // parent is the empty path
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_videbimus"))
+        .args(["--config", "video.kdl", "build"])
+        .current_dir(d.path())
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let cwd = std::fs::read_to_string(d.chunks("here")[0].join("cwd.txt")).unwrap();
+    assert_eq!(
+        Path::new(cwd.trim()),
+        d.path().canonicalize().unwrap(),
+        "the default cwd is the config's directory"
+    );
+}

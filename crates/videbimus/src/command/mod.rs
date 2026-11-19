@@ -696,7 +696,8 @@ fn dir_of(origin: &Origin) -> PathBuf {
         .at
         .path()
         .parent()
-        .unwrap_or(Path::new(""))
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or(Path::new("."))
         .to_owned();
     std::path::absolute(&dir).unwrap_or(dir)
 }
