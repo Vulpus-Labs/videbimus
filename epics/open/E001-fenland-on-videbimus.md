@@ -31,6 +31,12 @@ after this epic.
 | 0011 | The `command` recipe: external programs as assets |
 | 0008 | The `fenland` project crate: song render, print raster, editor export, Blender shot, fen backdrop |
 | 0009 | Fenland on videbimus end to end; the rocker-edit and stop/resume checks |
+| 0012 | A bare `--config` file name breaks command recipes (fixed) |
+| 0013 | Config: a template's own properties can use the lets it binds |
+| 0014 | Runtime: a stack skips compositing layers that draw nothing |
+| 0015 | Keys for files read outside the asset system (images, fonts, `dir`) |
+| 0016 | Command recipe: probe timeouts, probing only when needed, undeclared programs |
+| 0017 | Replace `Component::needs` with name-based asset reads |
 
 ## Dependency order
 
